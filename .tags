@@ -1,0 +1,45 @@
+SERV_PORT	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define SERV_PORT /;"	macro	line:13	file:
+MAXLINE	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define MAXLINE /;"	macro	line:14	file:
+PKT_SIZE	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define PKT_SIZE /;"	macro	line:15	file:
+MAX_FILE_LIST	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define MAX_FILE_LIST /;"	macro	line:16	file:
+MAX_NAMEFILE_LEN	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define MAX_NAMEFILE_LEN /;"	macro	line:17	file:
+SERVER_FOLDER	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^#define SERVER_FOLDER /;"	macro	line:18	file:
+packet	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^typedef struct packet{$/;"	struct	line:21	file:
+seq_num	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^	int seq_num;$/;"	member	line:22	struct:packet	file:
+pkt_dim	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^	short int pkt_dim;$/;"	member	line:23	struct:packet	file:
+data	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^	char data[PKT_SIZE-sizeof(int)-sizeof(short int)];$/;"	member	line:24	struct:packet	file:
+packet	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^} packet;$/;"	typedef	line:25	typeref:struct:packet	file:
+check_pkt	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int *check_pkt;$/;"	variable	line:27
+err_count	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int err_count;\/\/conta quante volte consecutivamente è fallita la ricezione$/;"	variable	line:28
+tot_pkts	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int tot_pkts, tot_ack, tot_sent;$/;"	variable	line:29
+tot_ack	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int tot_pkts, tot_ack, tot_sent;$/;"	variable	line:29
+tot_sent	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int tot_pkts, tot_ack, tot_sent;$/;"	variable	line:29
+base	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int base, max, window, num_files,i;$/;"	variable	line:30
+max	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int base, max, window, num_files,i;$/;"	variable	line:30
+window	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int base, max, window, num_files,i;$/;"	variable	line:30
+num_files	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int base, max, window, num_files,i;$/;"	variable	line:30
+i	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int base, max, window, num_files,i;$/;"	variable	line:30
+pkt	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^packet *pkt;$/;"	variable	line:31
+list_files	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^char *list_files[MAX_FILE_LIST];$/;"	variable	line:32
+fd	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int fd;$/;"	variable	line:33
+file_dim	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^off_t file_dim;$/;"	variable	line:34
+main	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int main(int argc, char **argv){$/;"	function	line:38	signature:(int argc, char **argv)
+getListFiles	/home/mich/Scrivania/progettoIW/simpleServerUDP.c	/^int getListFiles(char *list_files[MAX_FILE_LIST]){$/;"	function	line:127	signature:(char *list_files[MAX_FILE_LIST])
+main	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^int main (int argc, char** argv) {$/;"	function	line:8	signature:(int argc, char** argv)
+server_setup_conn	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^void server_setup_conn (int *server_sock, struct sockaddr_in *server_addr) {$/;"	function	line:174	signature:(int *server_sock, struct sockaddr_in *server_addr)
+server_reliable_conn	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {$/;"	function	line:194	signature:(int server_sock, struct sockaddr_in* client_addr)
+server_reliable_close	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^void server_reliable_close (int server_sock, struct sockaddr_in* client_addr, int pid) {$/;"	function	line:227	signature:(int server_sock, struct sockaddr_in* client_addr, int pid)
+PKT_SIZE	/home/mich/Scrivania/progettoIW/server.c	/^#define PKT_SIZE /;"	macro	line:13	file:
+SERVER_PORT	/home/mich/Scrivania/progettoIW/server.c	/^#define SERVER_PORT /;"	macro	line:14	file:
+LIST	/home/mich/Scrivania/progettoIW/server.c	/^#define LIST /;"	macro	line:15	file:
+REQUEST_SEC	/home/mich/Scrivania/progettoIW/server.c	/^#define REQUEST_SEC /;"	macro	line:16	file:
+READY	/home/mich/Scrivania/progettoIW/server.c	/^#define READY /;"	macro	line:17	file:
+SYN	/home/mich/Scrivania/progettoIW/server.c	/^#define SYN /;"	macro	line:19	file:
+SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define SYNACK /;"	macro	line:20	file:
+ACK_SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define ACK_SYNACK /;"	macro	line:21	file:
+set_timeout_sec	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout_sec(int sockfd, int timeout) {$/;"	function	line:28	signature:(int sockfd, int timeout)
+set_timeout	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout(int sockfd, int timeout) {$/;"	function	line:39	signature:(int sockfd, int timeout)
+create_socket	/home/mich/Scrivania/progettoIW/server.c	/^int create_socket(int timeout) {$/;"	function	line:51	signature:(int timeout)
+main	/home/mich/Scrivania/progettoIW/server.c	/^int main(int argc, char **argv){$/;"	function	line:76	signature:(int argc, char **argv)
+server_setup_conn	/home/mich/Scrivania/progettoIW/server.c	/^void server_setup_conn( int *server_sock, struct sockaddr_in *server_addr){$/;"	function	line:140	signature:( int *server_sock, struct sockaddr_in *server_addr)
+server_reliable_conn	/home/mich/Scrivania/progettoIW/server.c	/^int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {$/;"	function	line:170	signature:(int server_sock, struct sockaddr_in* client_addr)
