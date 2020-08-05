@@ -29,17 +29,20 @@ main	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^int main (int ar
 server_setup_conn	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^void server_setup_conn (int *server_sock, struct sockaddr_in *server_addr) {$/;"	function	line:174	signature:(int *server_sock, struct sockaddr_in *server_addr)
 server_reliable_conn	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {$/;"	function	line:194	signature:(int server_sock, struct sockaddr_in* client_addr)
 server_reliable_close	/home/mich/Scrivania/progettoIW/progetto_Jacopo/server.c	/^void server_reliable_close (int server_sock, struct sockaddr_in* client_addr, int pid) {$/;"	function	line:227	signature:(int server_sock, struct sockaddr_in* client_addr, int pid)
-PKT_SIZE	/home/mich/Scrivania/progettoIW/server.c	/^#define PKT_SIZE /;"	macro	line:13	file:
-SERVER_PORT	/home/mich/Scrivania/progettoIW/server.c	/^#define SERVER_PORT /;"	macro	line:14	file:
-LIST	/home/mich/Scrivania/progettoIW/server.c	/^#define LIST /;"	macro	line:15	file:
-REQUEST_SEC	/home/mich/Scrivania/progettoIW/server.c	/^#define REQUEST_SEC /;"	macro	line:16	file:
-READY	/home/mich/Scrivania/progettoIW/server.c	/^#define READY /;"	macro	line:17	file:
-SYN	/home/mich/Scrivania/progettoIW/server.c	/^#define SYN /;"	macro	line:19	file:
-SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define SYNACK /;"	macro	line:20	file:
-ACK_SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define ACK_SYNACK /;"	macro	line:21	file:
-set_timeout_sec	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout_sec(int sockfd, int timeout) {$/;"	function	line:28	signature:(int sockfd, int timeout)
-set_timeout	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout(int sockfd, int timeout) {$/;"	function	line:39	signature:(int sockfd, int timeout)
-create_socket	/home/mich/Scrivania/progettoIW/server.c	/^int create_socket(int timeout) {$/;"	function	line:51	signature:(int timeout)
-main	/home/mich/Scrivania/progettoIW/server.c	/^int main(int argc, char **argv){$/;"	function	line:76	signature:(int argc, char **argv)
-server_setup_conn	/home/mich/Scrivania/progettoIW/server.c	/^void server_setup_conn( int *server_sock, struct sockaddr_in *server_addr){$/;"	function	line:140	signature:( int *server_sock, struct sockaddr_in *server_addr)
-server_reliable_conn	/home/mich/Scrivania/progettoIW/server.c	/^int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {$/;"	function	line:170	signature:(int server_sock, struct sockaddr_in* client_addr)
+PKT_SIZE	/home/mich/Scrivania/progettoIW/server.c	/^#define PKT_SIZE /;"	macro	line:15	file:
+SERVER_PORT	/home/mich/Scrivania/progettoIW/server.c	/^#define SERVER_PORT /;"	macro	line:16	file:
+LIST	/home/mich/Scrivania/progettoIW/server.c	/^#define LIST /;"	macro	line:17	file:
+REQUEST_SEC	/home/mich/Scrivania/progettoIW/server.c	/^#define REQUEST_SEC /;"	macro	line:18	file:
+READY	/home/mich/Scrivania/progettoIW/server.c	/^#define READY /;"	macro	line:19	file:
+SYN	/home/mich/Scrivania/progettoIW/server.c	/^#define SYN /;"	macro	line:21	file:
+SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define SYNACK /;"	macro	line:22	file:
+ACK_SYNACK	/home/mich/Scrivania/progettoIW/server.c	/^#define ACK_SYNACK /;"	macro	line:23	file:
+set_timeout_sec	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout_sec(int sockfd, int timeout) {$/;"	function	line:30	signature:(int sockfd, int timeout)
+set_timeout	/home/mich/Scrivania/progettoIW/server.c	/^void set_timeout(int sockfd, int timeout) {$/;"	function	line:41	signature:(int sockfd, int timeout)
+create_socket	/home/mich/Scrivania/progettoIW/server.c	/^int create_socket(int timeout) {$/;"	function	line:53	signature:(int timeout)
+files_from_folder_server	/home/mich/Scrivania/progettoIW/server.c	/^int files_from_folder_server(char *list_files[MAX_FILE_LIST]) {$/;"	function	line:80	signature:(char *list_files[MAX_FILE_LIST])
+input_wait	/home/mich/Scrivania/progettoIW/server.c	/^void input_wait(char *s){$/;"	function	line:110	signature:(char *s)
+main	/home/mich/Scrivania/progettoIW/server.c	/^int main(int argc, char **argv){$/;"	function	line:116	signature:(int argc, char **argv)
+server_setup_conn	/home/mich/Scrivania/progettoIW/server.c	/^void server_setup_conn( int *server_sock, struct sockaddr_in *server_addr){$/;"	function	line:208	signature:( int *server_sock, struct sockaddr_in *server_addr)
+server_reliable_conn	/home/mich/Scrivania/progettoIW/server.c	/^int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {$/;"	function	line:238	signature:(int server_sock, struct sockaddr_in* client_addr)
+time_stamp	/home/mich/Scrivania/progettoIW/server.c	/^char *time_stamp(){$/;"	function	line:279
