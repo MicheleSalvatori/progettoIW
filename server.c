@@ -11,6 +11,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include "comm.h"
+#include "sender.h"
 
 #define PKT_SIZE 1500
 #define SERVER_PORT 25490
@@ -182,9 +183,10 @@ int main(int argc, char **argv){
 							}
 
 
-							// Scrivo tutti i file in serverFiles nel fd, ma può essere inviato tramite buff direttamente?
+							// Scrivo tutti i file in serverFiles nel file che verrà inviato al client
 							i=0;
 							while(i<num_files) {
+                printf("%d",&i);
 								memset(buff, 0, sizeof(buff));
 								snprintf(buff, strlen(list_files[i])+2, "%s\n", list_files[i]); //+2 per terminatore di stringa e \n
 								printf("Buffering file list: %s",buff);
@@ -193,13 +195,15 @@ int main(int argc, char **argv){
 							}
 
 							read(fd, (void *)&buffToSend, strlen(buffToSend));
+              printf("prima del sender\n");
+              sender(server_sock, &client_address, FLYING, LOST_PROB, fd);
 
-              if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
+              /*if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
                 printf("Errore invio messaggio\n");
-              }
+              }*/
 
 							close(fd);
-							remove("file_list.txt");
+							//remove("file_list.txt");
 							break;
   					}
             goto request;

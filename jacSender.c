@@ -1,16 +1,4 @@
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
-
-#include <unistd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <string.h>
-#include <dirent.h>
-#include <fcntl.h>
-#include "comm.h"
+#include "basic.h"
 
 int *check_pkt;
 int err_count;//conta quante volte consecutivamente è fallita la ricezione
@@ -25,9 +13,11 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	off_t file_dim;
 	
 	srand(time(NULL));
+	base=0;
+	window=N/2;
+	max=window-1;
 	pkt=calloc(N, sizeof(packet));
-
-    printf("INIZIO DEL SENDER\n\n");
+	check_pkt=calloc(N, sizeof(int));//0=da inviare, 1 inviato non ackato, 2 ackato. non serve che ruoti.
 	
 	//calcolo tot_pkts
 	file_dim = lseek(fd, 0, SEEK_END);
@@ -42,8 +32,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	struct timeval end, start;
 	gettimeofday(&start, NULL);
 	//inizializzazione finestra di invio e primi pacchetti
-
-	for(i=0; i<tot_pkts; i++){
+	for(i=base; i<window; i++){
 		pkt[i].seq_num = i;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
 		if(pkt[i].pkt_dim==-1){
@@ -52,18 +41,12 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	}
 
 	//inizio trasmissione
-	//tot_ack=0;
-	//tot_sent=0;
-	//err_count=0;
-    int num_packet_sent = 0;
-
-
-
-	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
-		//send_window(socket, receiver_addr, pkt, lost_prob, N);
-        sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0);
-        num_packet_sent++;	
-		//recv_ack(socket, receiver_addr, fd, N);
+	tot_ack=0;
+	tot_sent=0;
+	err_count=0;
+	while(tot_ack<tot_pkts && err_count<MAX_ERR){//while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
+		send_window(socket, receiver_addr, pkt, lost_prob, N);		
+		recv_ack(socket, receiver_addr, fd, N);
 	}
 	
 	if(err_count==MAX_ERR){
@@ -72,7 +55,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 		return;
 	}
 	
-	/* //fine trasmissione
+	//fine trasmissione
 	for(i=0; i<MAX_ERR; i++){
 		memset(buff, 0, PKT_SIZE);
 		((packet*)buff)->seq_num=-1;
@@ -85,8 +68,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			close(fd);
 			return;
 		}
-	} */
-
+	}
 	printf("File transfer failed\n");
 	close(fd);
 	return;
@@ -95,6 +77,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
+	if(base<max){
 		for(i=base; i<=max; i++){
 			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
 				if(correct_send(lost_prob)) {
@@ -108,6 +91,7 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 				check_pkt[i]=1;
 			}
 		}
+	}
 	else{
 		for(i=base; i<N; i++){
 			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){

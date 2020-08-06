@@ -60,7 +60,7 @@ menu:
       printf("CLIENT: request failed (sending)\n");
       exit(-1);
     }
-    fd = open("file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server (vedere se va messo in clientFiles)
+    fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server (vedere se va messo in clientFiles)
 
 		// errore qui forse, passiamo fd a casaccio
     // control = recvfrom(client_sock, (void*)&fd, PKT_SIZE, 0, (struct sockaddr *)&server_address, &addr_len);
