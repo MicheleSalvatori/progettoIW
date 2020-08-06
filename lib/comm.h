@@ -33,7 +33,7 @@
 #define SELECT_FILE_SEC 30
 
 char i;
-#define fflush(stdin) while ((i = getchar()) != '\n' && i != EOF) { };
+// #define fflush(stdin) while ((i = getchar()) != '\n' && i != EOF)
 
 #define PKT_SIZE 1500
 #define MAX_INPUT_LINE 128
