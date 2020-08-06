@@ -18,6 +18,7 @@ void client_reliable_conn (int, struct sockaddr_in*);
 char *time_stamp();
 
 
+
 int main (int argc, char** argv) {
 
 	int control, answer, bytes, num_files;
@@ -59,7 +60,7 @@ menu:
       printf("CLIENT: request failed (sending)\n");
       exit(-1);
     }
-    fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666);
+    fd = open("file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server (vedere se va messo in clientFiles)
 
 		// errore qui forse, passiamo fd a casaccio
     // control = recvfrom(client_sock, (void*)&fd, PKT_SIZE, 0, (struct sockaddr *)&server_address, &addr_len);
@@ -76,14 +77,10 @@ menu:
     if (end_file >0){
       lseek(fd, 0, SEEK_SET);
       read(fd, buff, end_file);
+			printf("\n==================== FILE LIST =====================\n");
       printf("%s", buff);
+			printf("====================================================\n");
     }
-
-		// LETTURA MESSAGGIO TEMPORANEO DI PROVA
-		printf("CONTENUTO MESSAGGIO: %s\n\n", buf);
-    close(fd);
-    remove("clientFiles/file_list.txt");
-    break;
   }
 
   goto menu;
