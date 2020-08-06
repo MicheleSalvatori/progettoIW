@@ -41,6 +41,7 @@ int main (int argc, char** argv) {
   if (control < 0){
     printf("CLIENT: server errore READY\n");
     exit(-1);
+	
   }
 
 menu:
