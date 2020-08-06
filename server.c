@@ -10,8 +10,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include "comm.h"
-#include "sender.h"
+#include "./lib/comm.h"
 
 #define PKT_SIZE 1500
 #define SERVER_PORT 25490

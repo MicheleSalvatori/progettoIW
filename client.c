@@ -11,7 +11,8 @@
 #include <fcntl.h>
 
 
-#include "comm.h"
+#include "./lib/comm.h"
+#include "./lib/receiver.h"
 
 void client_setup_conn (int*, struct sockaddr_in*);
 void client_reliable_conn (int, struct sockaddr_in*);
@@ -62,20 +63,14 @@ menu:
     }
     fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server
 
-		// errore qui forse, passiamo fd a casaccio
-    control = recvfrom(client_sock, (void*)&fd, PKT_SIZE, 0, (struct sockaddr *)&server_address, &addr_len);
-	//control = recvfrom(client_sock, buf, sizeof(buf), 0, (struct sockaddr *)&server_address, &addr_len);
+   	control = receiver(client_sock, &server_address, 0, 0, fd);
+			if(control == -1) {
+				close(fd);
+				remove("clientFiles/file_list.txt");
+			}
 
-    if (control < 0){
-			printf("Errore control recvfrom\n" );
-      close(fd);
-      remove("clientFiles/file_list.txt");
-    }
-	else {
-		printf ("pacchetto ricevuto\n")
-	}
 
-		// LETTURA FILE
+	// LETTURA FILE
     end_file = lseek(fd, 0, SEEK_END);
     if (end_file >0){
       lseek(fd, 0, SEEK_SET);
