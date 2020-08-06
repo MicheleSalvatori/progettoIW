@@ -75,8 +75,6 @@ int create_socket(int timeout) {
 	return sockfd;
 }
 
-
-
 int files_from_folder_server(char *list_files[MAX_FILE_LIST]) {
   /* apre la cartella e prende tutti i nomi dei file presenti in essa,
    * inserendoli in un buffer e ritornando il numero di file presenti
@@ -190,7 +188,7 @@ int main(int argc, char **argv){
 
 							// read(fd, (void *)&buffToSend, strlen(buff));
 
-              if(sendto(server_sock, buffToSend, strlen(buffToSend), 0, (struct sockaddr *)&client_address, addr_len) < 0){
+              if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
                 printf("Errore invio messaggio\n");
               }
 
