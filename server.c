@@ -250,7 +250,7 @@ int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {
     }
     // set_timeout_sec(server_sock, 1);//timeout attivato alla ricezione del SYN
 
-    //invio del SYNACK
+    //invio del SYNAcK
 		printf("%s SERVER:: invio SYNACK\n", time_stamp());
 
     control = sendto(server_sock, SYNACK, strlen(SYNACK), 0, (struct sockaddr *)client_addr, addr_len);
