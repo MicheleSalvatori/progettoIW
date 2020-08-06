@@ -63,7 +63,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		//send_window(socket, receiver_addr, pkt, lost_prob, N);
         if (sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)receiver_addr, addr_len)<0){
-			printf ("Packet error, pkt num: %d",num_packet_sent);
+			printf ("Packet error, pkt num: %d\n",num_packet_sent);
 			exit(-1);
 		}
         num_packet_sent++;	
@@ -84,8 +84,6 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			return;
 		}
 	} */
-
-	printf("File transfer failed\n");
 	close(fd);
 	return;
 }

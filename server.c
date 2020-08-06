@@ -2,7 +2,6 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,6 +10,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 #include "./lib/comm.h"
+#include "./lib/sender.h"
 
 #define PKT_SIZE 1500
 #define SERVER_PORT 25490
@@ -200,7 +200,7 @@ int main(int argc, char **argv){
               }*/
 
 							close(fd);
-							//remove("file_list.txt");
+							remove("file_list.txt");
 							break;
   					}
             goto request;

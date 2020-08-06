@@ -34,13 +34,12 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 */
 
 	printf("File transfer started\nWait...\n");
-	error_count=0;
 	memset(&pkt_aux, 0, sizeof(packet));
 
-	while(pkt_aux.seq_num!=-1 && error_count<MAX_ERR){//while ho pachetti da ricevere
+	while(pkt_aux.seq_num!=-1){//while ho pachetti da ricevere
 		// recv_window(socket, sender_addr, pkt, fd, N);
 
-        if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0) && (error_count<MAX_ERR)) {
+        if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
 		printf("error receive pkt\n");
 		error_count++;
 		return -1;
@@ -48,6 +47,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 
         seq_num = pkt_aux.seq_num;
 	    printf("CLIENT: pkt ricevuto %d\n", seq_num);
+		pkt_aux.seq_num = -1;
 
 	}
 	if(error_count==MAX_ERR){
@@ -58,6 +58,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 		printf("File received\n\n");
 		return 0;
 	}
+	
 }
 
 /*
