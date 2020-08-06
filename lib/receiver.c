@@ -40,14 +40,16 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 		// recv_window(socket, sender_addr, pkt, fd, N);
 
         if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
-		printf("error receive pkt\n");
-		error_count++;
-		return -1;
+			printf("error receive pkt\n");
+			error_count++;
+			return -1;
 	    }
-
-        seq_num = pkt_aux.seq_num;
-	    printf("CLIENT: pkt ricevuto %d\n", seq_num);
-		pkt_aux.seq_num = -1;
+		else{
+			seq_num = pkt_aux.seq_num;
+			sendto(socket, &seq_num+1, sizeof(int), 0, (struct sockaddr *)sender_addr, addr_len); //Invio ACK con seq del prossimo pkt atteso
+			printf("CLIENT: pkt ricevuto %d\n", seq_num);
+			pkt_aux.seq_num = -1;
+		}
 
 	}
 	if(error_count==MAX_ERR){

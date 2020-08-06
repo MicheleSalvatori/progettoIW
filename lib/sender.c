@@ -12,10 +12,19 @@
 #include <fcntl.h>
 #include "comm.h"
 
+#define WIN_SIZE 3 			//Dimensione della finestra di trasmissione;
+//#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
+//#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
+
+
 int *check_pkt;
 int err_count;//conta quante volte consecutivamente è fallita la ricezione
 int tot_pkts, tot_ack, tot_sent;
 int base, max, window;
+int ack_num;
+
+int SendBase = 0;		// Base della finestra di trasmissione (pkt piu vecchio non acked)
+int NextSeqNum = 0;		// Seq number atteso (ult)
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
@@ -67,7 +76,10 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			exit(-1);
 		}
         num_packet_sent++;	
-		//recv_ack(socket, receiver_addr, fd, N);
+		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)receiver_addr, &addr_len)){
+			printf("ACK NUMBER: %d\n\n",ack_num);
+			perror("ACK RECVFROM ERROR:");
+		}
 	}
 	
 	/* //fine trasmissione
@@ -242,5 +254,4 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	}
 	
 	return new_read;
-}
-*/
+} */

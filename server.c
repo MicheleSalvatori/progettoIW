@@ -22,6 +22,8 @@
 #define SYNACK "synack"
 #define ACK_SYNACK "ack_synack"
 
+
+
 void server_setup_conn( int *, struct sockaddr_in *);
 int server_reliable_conn(int , struct sockaddr_in *); // vedere se per tcp va bene
 char *time_stamp();
