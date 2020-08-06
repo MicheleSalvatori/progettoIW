@@ -27,7 +27,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	srand(time(NULL));
 	pkt=calloc(N, sizeof(packet));
 
-    printf("INIZIO DEL SENDER\n\n");
+    printf("\n====== INIZIO DEL SENDER ======\n\n");
 	
 	//calcolo tot_pkts
 	file_dim = lseek(fd, 0, SEEK_END);
@@ -37,6 +37,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	else{
 		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int))+1;
 	}
+	printf ("Numero Pacchetti: %d\n",tot_pkts);
 	lseek(fd, 0, SEEK_SET);
 
 	struct timeval end, start;
@@ -61,15 +62,12 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 
 	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		//send_window(socket, receiver_addr, pkt, lost_prob, N);
-        sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0);
+        if (sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)receiver_addr, addr_len)<0){
+			printf ("Packet error, pkt num: %d",num_packet_sent);
+			exit(-1);
+		}
         num_packet_sent++;	
 		//recv_ack(socket, receiver_addr, fd, N);
-	}
-	
-	if(err_count==MAX_ERR){
-		printf("File transfer failed (inactive receiver)\n");
-		close(fd);
-		return;
 	}
 	
 	/* //fine trasmissione
@@ -92,7 +90,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	return;
 }
 
-void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
+/*void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 		for(i=base; i<=max; i++){
@@ -136,9 +134,9 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 			}
 		}
 	}
-}
+}*/
 
-int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritorna -1 se ci sono errori, 0 altrimenti
+/*int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritorna -1 se ci sono errori, 0 altrimenti
 	int i, ack_num=0, new_read=0;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 	
@@ -247,3 +245,4 @@ int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritor
 	
 	return new_read;
 }
+*/

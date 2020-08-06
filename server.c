@@ -186,7 +186,6 @@ int main(int argc, char **argv){
 							// Scrivo tutti i file in serverFiles nel file che verrà inviato al client
 							i=0;
 							while(i<num_files) {
-                printf("%d",&i);
 								memset(buff, 0, sizeof(buff));
 								snprintf(buff, strlen(list_files[i])+2, "%s\n", list_files[i]); //+2 per terminatore di stringa e \n
 								printf("Buffering file list: %s",buff);
@@ -195,7 +194,6 @@ int main(int argc, char **argv){
 							}
 
 							read(fd, (void *)&buffToSend, strlen(buffToSend));
-              printf("prima del sender\n");
               sender(server_sock, &client_address, FLYING, LOST_PROB, fd);
 
               /*if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){

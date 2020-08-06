@@ -60,17 +60,20 @@ menu:
       printf("CLIENT: request failed (sending)\n");
       exit(-1);
     }
-    fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server (vedere se va messo in clientFiles)
+    fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server
 
 		// errore qui forse, passiamo fd a casaccio
-    // control = recvfrom(client_sock, (void*)&fd, PKT_SIZE, 0, (struct sockaddr *)&server_address, &addr_len);
-		control = recvfrom(client_sock, buf, sizeof(buf), 0, (struct sockaddr *)&server_address, &addr_len);
+    control = recvfrom(client_sock, (void*)&fd, PKT_SIZE, 0, (struct sockaddr *)&server_address, &addr_len);
+	//control = recvfrom(client_sock, buf, sizeof(buf), 0, (struct sockaddr *)&server_address, &addr_len);
 
     if (control < 0){
 			printf("Errore control recvfrom\n" );
       close(fd);
       remove("clientFiles/file_list.txt");
     }
+	else {
+		printf ("pacchetto ricevuto\n")
+	}
 
 		// LETTURA FILE
     end_file = lseek(fd, 0, SEEK_END);
