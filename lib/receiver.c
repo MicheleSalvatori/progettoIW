@@ -23,7 +23,7 @@ packet *pkt;
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
 	socklen_t addr_len=sizeof(struct sockaddr_in);
 	off_t file_dim;
-    int seq_num;
+    int seq_num, new_write;
 	
 /*	srand(time(NULL));
 	base=0;
@@ -40,11 +40,11 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 		// recv_window(socket, sender_addr, pkt, fd, N);
 
         if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
-		printf("error receive pkt\n");
+		perror("error receive pkt\n");
 		error_count++;
 		return -1;
 	    }
-
+		new_write++;
         seq_num = pkt_aux.seq_num;
 	    printf("CLIENT: pkt ricevuto %d\n", seq_num);
 		pkt_aux.seq_num = -1;
@@ -56,10 +56,16 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	}
 	else{
 		printf("File received\n\n");
-		return 0;
 	}
-	
+
+	//scrittura nuovi pacchetti
+	// for(i=0; i<new_write; i++){
+		write(fd, pkt_aux.data, pkt_aux.pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
+		// base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
+		// max=(base+window-1)%N;
+	// }
 }
+	
 
 /*
 void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int fd, int N){
@@ -151,13 +157,6 @@ void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int f
 			}
 		}
 	}
-	
-	//scrittura nuovi pacchetti
-	for(i=0; i<new_write; i++){
-		write(fd, pkt[base].data, pkt[base].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
-		base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
-		max=(base+window-1)%N;
-	}
-	memset(&pkt_aux, 0, sizeof(packet));
-}
-*/
+	*/
+
+

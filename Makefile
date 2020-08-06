@@ -4,8 +4,8 @@ FILEC = $(LIB)receiver.c $(LIB)sender.c client.c -lm -lpthread -lrt
 FILES = $(LIB)receiver.c $(LIB)sender.c server.c -lm -lpthread -lrt
 
 do:
-	$(CC) $(FILEC) -o client
-	$(CC) $(FILES) -o server
+	$(CC) $(FILEC) -o client.out
+	$(CC) $(FILES) -o server.out
 
 	@echo " "
 	@echo "Compilato"

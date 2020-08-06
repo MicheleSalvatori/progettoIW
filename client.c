@@ -75,6 +75,9 @@ menu:
 			printf("\n==================== FILE LIST =====================\n");
       printf("%s", buff);
 			printf("====================================================\n");
+
+	close(fd);
+	remove("clientFiles/file_list.txt");
     }
   }
 
