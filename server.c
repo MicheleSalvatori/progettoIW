@@ -75,8 +75,6 @@ int create_socket(int timeout) {
 	return sockfd;
 }
 
-
-
 int files_from_folder_server(char *list_files[MAX_FILE_LIST]) {
   /* apre la cartella e prende tutti i nomi dei file presenti in essa,
    * inserendoli in un buffer e ritornando il numero di file presenti
@@ -148,7 +146,10 @@ int main(int argc, char **argv){
           // pid = getpid();
           // child_sock = create_socket(REQUEST_SEC); //REQUEST_SEC secondi di timeout per scegliere il servizio
 
+
           control = sendto(server_sock, READY, strlen(READY), 0, (struct sockaddr *)&client_address, addr_len);
+					printf("%s SERVER: Server Ready to connect\n", time_stamp());
+					printf("====================================================");
           if (control < 0){
 						perror("Ready error");
             printf("SERVER: port comunication failed\n");
@@ -163,7 +164,7 @@ int main(int argc, char **argv){
             printf("SERVER %d: request failed\n", pid);
             free(buff);
             free(path);
-            // close(serv);
+            // close(serv)attesa syn;
             return 0;
           }
 
@@ -180,17 +181,20 @@ int main(int argc, char **argv){
 								return 1;
 							}
 
+
+							// Scrivo tutti i file in serverFiles nel fd, ma può essere inviato tramite buff direttamente?
 							i=0;
 							while(i<num_files) {
 								memset(buff, 0, sizeof(buff));
 								snprintf(buff, strlen(list_files[i])+2, "%s\n", list_files[i]); //+2 per terminatore di stringa e \n
+								printf("Buffering file list: %s",buff);
 								write(fd, buff, strlen(buff));
 								i++;
 							}
 
-							// read(fd, (void *)&buffToSend, strlen(buff));
+							read(fd, (void *)&buffToSend, strlen(buffToSend));
 
-              if(sendto(server_sock, buffToSend, strlen(buffToSend), 0, (struct sockaddr *)&client_address, addr_len) < 0){
+              if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
                 printf("Errore invio messaggio\n");
               }
 
@@ -242,6 +246,7 @@ int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {
     socklen_t addr_len = sizeof(*client_addr);
 
     //in attesa di ricevere SYN
+		printf("================= CONNECTION SETUP =================\n");
 		printf("%s SERVER: attesa syn\n", time_stamp());
     control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len);
     if (control < 0 || strncmp(buff, SYN, strlen(SYN)) != 0) {
@@ -250,8 +255,8 @@ int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {
     }
     // set_timeout_sec(server_sock, 1);//timeout attivato alla ricezione del SYN
 
-    //invio del SYNAcK
-		printf("%s SERVER:: invio SYNACK\n", time_stamp());
+    //invio del SYNACK
+		printf("%s SERVER: invio SYNACK\n", time_stamp());
 
     control = sendto(server_sock, SYNACK, strlen(SYNACK), 0, (struct sockaddr *)client_addr, addr_len);
     if (control < 0) {
