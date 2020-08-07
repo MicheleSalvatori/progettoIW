@@ -107,11 +107,6 @@ int files_from_folder_server(char *list_files[MAX_FILE_LIST]) {
   return i;
 }
 
-void input_wait(char *s){
-	char c;
-	printf("%s\n", s);
-	while (c = getchar() != '\n');
-}
 
 int main(int argc, char **argv){
     int server_sock, child_sock;

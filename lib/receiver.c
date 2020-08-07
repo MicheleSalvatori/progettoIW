@@ -29,18 +29,14 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 
 	printf("\n====== INIZIO DEL RECEIVER ======\n\n");
 	printf("File transfer started\nWait...\n");
-	
-	printf("cntrl1\n");
+
 	pkt=calloc(6000, sizeof(packet));		// al posto di 6000 va la dim finestra
 	memset(&pkt_aux, 0, sizeof(packet));
-	//memset(pkt+new_write, 0, sizeof(packet));
-	printf("cntrl2\n");
 
 	new_write = 0;
 	seq_num = 0;
 
 	while(seq_num!=-1){//while ho pachetti da ricevere
-		printf("cntrl3\n");
 		// recv_window(socket, sender_addr, pkt, fd, N);
 	
 	
