@@ -24,34 +24,46 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	socklen_t addr_len=sizeof(struct sockaddr_in);
 	off_t file_dim;
     int seq_num, new_write;
+	long i = 0;
 	
-/*	srand(time(NULL));
-	base=0;
-	window=N/2;
-	max=window-1;//eg. base=6-->max=(6+4-1)%8=9%8=1 (6 7 0 1)
-	pkt=calloc(N, sizeof(packet));
-	check_pkt=calloc(N, sizeof(int));
-*/
+
 	printf("\n====== INIZIO DEL RECEIVER ======\n\n");
 	printf("File transfer started\nWait...\n");
-	new_write = 0;
+	
 	printf("cntrl1\n");
-	pkt=calloc(6000, sizeof(packet));
+	pkt=calloc(6000, sizeof(packet));		// al posto di 6000 va la dim finestra
+	memset(&pkt_aux, 0, sizeof(packet));
 	//memset(pkt+new_write, 0, sizeof(packet));
 	printf("cntrl2\n");
 
-	while(pkt[new_write].seq_num!=-1){//while ho pachetti da ricevere
+	new_write = 0;
+	seq_num = 0;
+
+	while(seq_num!=-1){//while ho pachetti da ricevere
 		printf("cntrl3\n");
 		// recv_window(socket, sender_addr, pkt, fd, N);
-		memset(pkt+new_write, 0, sizeof(packet));
-		printf("cntrl4\n");
+	
+	
 
-        if((recvfrom(socket, &pkt[new_write], PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
-			printf("error receive pkt\n");
-			perror("Error");
+        if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
+			perror("Error receive pkt\n");
 			error_count++;
 			return -1;
 	    }
+		if (pkt_aux.seq_num == -1){
+			seq_num = -1;
+			break;
+		}
+
+		
+		seq_num = pkt_aux.seq_num;
+		printf("CLIENT: pkt ricevuto %d\n", seq_num);
+		memset(pkt+seq_num, 0, sizeof(packet));
+		pkt[seq_num] = pkt_aux;
+		++new_write;
+
+
+		/*
 		else{
 			printf("File received\n\n");
 			seq_num = pkt[new_write].seq_num;
@@ -60,11 +72,17 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 			printf("CLIENT: pkt ricevuto %d\n", seq_num);
 			new_write++;
 		}
+		*/
+
+	memset(&pkt_aux, 0, sizeof(packet));
+
 	}
 
 	//scrittura nuovi pacchetti
+	printf("Inizio scrittura file\nPacchetti da scrivere: %d\n", new_write);
 	for(i=0; i<new_write; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
+		printf("Scritto pkt %d, %ld\n", pkt[i].seq_num, i);
 		// base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
 		// max=(base+window-1)%N;
 	}

@@ -82,6 +82,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			exit(-1);
 		}
 		else{
+			printf("Packet %d\n", pkt[num_packet_sent].seq_num);
 			printf("Packet Sent Num: %d\n",num_packet_sent);
 		}
         num_packet_sent++;	
