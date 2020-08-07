@@ -162,35 +162,6 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 				}
 			}
 	}
-
-	//Caso in cui la finestra è piena, quindi viene spostata in avanti di N
-	else{
-		for(i=SendBase; i<N; i++){
-			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
-				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
-					perror ("PACKET LOST (1)");
-				}
-				else {
-					printf("Packet sent\n");
-				}
-				tot_sent++;
-				check_pkt[i]=1;
-				}
-			}
-		for(i=0; i<=WindowEnd; i++){
-			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
-				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
-					perror ("PACKET LOST (1)");
-				}
-				else {
-					printf("Packet sent\n");
-				}
-				tot_sent++;
-				check_pkt[i]=1;
-				}
-			}
-		}
-
 }
 
 /*int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritorna -1 se ci sono errori, 0 altrimenti
