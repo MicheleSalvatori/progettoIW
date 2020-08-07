@@ -1,3 +1,0 @@
-textA.txt
-textC.pdf
-textB.exe

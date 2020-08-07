@@ -32,33 +32,42 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	pkt=calloc(N, sizeof(packet));
 	check_pkt=calloc(N, sizeof(int));
 */
-
+	printf("\n====== INIZIO DEL RECEIVER ======\n\n");
 	printf("File transfer started\nWait...\n");
-	memset(&pkt_aux, 0, sizeof(packet));
+	new_write = 0;
+	printf("cntrl1\n");
+	pkt=calloc(6000, sizeof(packet));
+	//memset(pkt+new_write, 0, sizeof(packet));
+	printf("cntrl2\n");
 
-	while(pkt_aux.seq_num!=-1){//while ho pachetti da ricevere
+	while(pkt[new_write].seq_num!=-1){//while ho pachetti da ricevere
+		printf("cntrl3\n");
 		// recv_window(socket, sender_addr, pkt, fd, N);
+		memset(pkt+new_write, 0, sizeof(packet));
+		printf("cntrl4\n");
 
-        if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
+        if((recvfrom(socket, &pkt[new_write], PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
 			printf("error receive pkt\n");
+			perror("Error");
 			error_count++;
 			return -1;
 	    }
 		else{
 			printf("File received\n\n");
-			seq_num = pkt_aux.seq_num;
-			sendto(socket, &seq_num+1, sizeof(int), 0, (struct sockaddr *)sender_addr, addr_len); //Invio ACK con seq del prossimo pkt atteso
+			seq_num = pkt[new_write].seq_num;
+			int ack_num = seq_num+1;
+			sendto(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)sender_addr, addr_len); //Invio ACK con seq del prossimo pkt atteso
 			printf("CLIENT: pkt ricevuto %d\n", seq_num);
-			pkt_aux.seq_num = -1;
+			new_write++;
 		}
 	}
 
 	//scrittura nuovi pacchetti
-	// for(i=0; i<new_write; i++){
-	write(fd, pkt_aux.data, pkt_aux.pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
+	for(i=0; i<new_write; i++){
+		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
 		// base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
 		// max=(base+window-1)%N;
-	// }
+	}
 }
 	
 

@@ -44,8 +44,11 @@ int main (int argc, char** argv) {
   }
 
 menu:
-  printf("\n1) List available files on server\n");
-  printf("Choose an operation: ");
+  printf("\n============= COMMAND LIST ================\n");
+  printf("1) List available files on server\n");
+  printf("2) Download a file from server\n");
+  printf("============================================\n\n");
+  printf("> Choose an operation: ");
   if(scanf("%d", &answer) > 0 && answer == LIST ){
   //  alarm(0);
   }
@@ -53,32 +56,86 @@ menu:
 
   switch (answer) {
     case LIST:
-    control = sendto(client_sock, (void*)&list, sizeof(int), 0, (struct sockaddr *)&server_address, addr_len);
-    if (control < 0) {
-      printf("CLIENT: request failed (sending)\n");
-      exit(-1);
-    }
-    fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server
+		control = sendto(client_sock, (void*)&list, sizeof(int), 0, (struct sockaddr *)&server_address, addr_len);
+		if (control < 0) {
+		printf("CLIENT: request failed (sending)\n");
+		exit(-1);
+		}
+		fd = open("clientFiles/file_list.txt", O_CREAT | O_TRUNC | O_RDWR, 0666); //Apro il file con la lista dei file del server
 
-   	control = receiver(client_sock, &server_address, 0, 0, fd);
-			if(control == -1) {
-				close(fd);
-				remove("clientFiles/file_list.txt");
+		control = receiver(client_sock, &server_address, 0, 0, fd);
+				if(control == -1) {
+					close(fd);
+					remove("clientFiles/file_list.txt");
+				}
+
+
+		// LETTURA FILE
+		end_file = lseek(fd, 0, SEEK_END);
+		if (end_file >0){
+		lseek(fd, 0, SEEK_SET);
+		read(fd, buff, end_file);
+				printf("\n==================== FILE LIST =====================\n");
+		printf("%s", buff);
+				printf("====================================================\n");
+
+		close(fd);
+		remove("clientFiles/file_list.txt");
+		break;
+		}
+
+		case GET:
+			control = sendto(client_sock, (void *)&get, sizeof(int), 0, (struct sockaddr *)&server_address, addr_len);
+			if (control < 0) {
+				printf("CLIENT: request failed (sending)\n");
+				exit(-1);
 			}
+			printf("Type the file name to download (30 seconds): ");
+			alarm(SELECT_FILE_SEC);
+			memset(buff, 0, sizeof(buff));
+			if(scanf("%s", buff)>0) {
+				alarm(0);
+			}
+			
+			//controlla se il file esiste già nella directory del client
+			char *aux = calloc(PKT_SIZE, sizeof(char));
+			snprintf(aux, 12+strlen(buff)+1, "clientFiles/%s", buff);
+			fd = open(aux, O_RDONLY);
+			if(fd>0){
+				printf("CLIENT: The file already exists\n");
+				close(fd);
+				exit(-1);
+			}
+			close(fd);
 
+			//invio del nome del file al server
+			control = sendto(client_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&server_address, addr_len);
+			if (control < 0) {
+				printf("CLIENT: request failed (sending)\n");
+				exit(-1);
+			}
+			snprintf(path, 12+strlen(buff)+1, "clientFiles/%s", buff);
+			fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0666);
 
-	// LETTURA FILE
-    end_file = lseek(fd, 0, SEEK_END);
-    if (end_file >0){
-      lseek(fd, 0, SEEK_SET);
-      read(fd, buff, end_file);
-			printf("\n==================== FILE LIST =====================\n");
-      printf("%s", buff);
-			printf("====================================================\n");
-
-	close(fd);
-	remove("clientFiles/file_list.txt");
-    }
+			//in attesa del server se il file è presente o meno
+			if (recvfrom(client_sock, buff, strlen(NFOUND), 0, (struct sockaddr *)&server_address, &addr_len) < 0) {
+				printf("CLIENT: error recvfrom\n");
+			}
+			if (strncmp(buff, NFOUND, strlen(NFOUND)) == 0) { //file non presente sul server se ricevo notfound
+				printf("CLIENT: file not found on server\n");
+				close(fd);
+				remove(path);
+				exit(-1);
+			}
+			//set_timeout(client_sock, TIMEOUT_PKT);
+			control=receiver(client_sock, &server_address, FLYING, LOST_PROB, fd);
+			if (control == -1) {
+				close(fd);
+				remove(path);
+				break;
+			}
+			close(fd);
+			break;
   }
 
   goto menu;
@@ -114,7 +171,8 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 
 	//passo 1 del three-way-handashake per setup di connessione
 	// set_timeout_sec(client_sock, 1);
-  printf("%s CLIENT: invio syn\n", time_stamp());
+	printf("\n================= CONNECTION SETUP =================\n");
+    printf("%s CLIENT: invio syn\n", time_stamp());
 
 	control = sendto(client_sock, SYN, strlen(SYN), 0, (struct sockaddr *)server_addr, addr_len);
 	if (control < 0) {
@@ -143,6 +201,7 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 	}
 
 	printf("%s CLIENT: connection established\n", time_stamp());
+	printf("===================================================\n");
 }
 
 

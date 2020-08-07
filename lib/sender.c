@@ -16,6 +16,8 @@
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
 //#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
 
+void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
+
 
 int *check_pkt;
 int err_count;//conta quante volte consecutivamente è fallita la ricezione
@@ -24,7 +26,8 @@ int base, max, window;
 int ack_num;
 
 int SendBase = 0;		// Base della finestra di trasmissione (pkt piu vecchio non acked)
-int NextSeqNum = 0;		// Seq number atteso (ult)
+int NextSeqNum = 0;
+int WindowEnd = 0;		// Seq number atteso (ult)
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
@@ -34,7 +37,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	off_t file_dim;
 	
 	srand(time(NULL));
-	pkt=calloc(N, sizeof(packet));
+	check_pkt=calloc(N, sizeof(int));//0=da inviare, 1 inviato non ackato, 2 ackato. non serve che ruoti.
 
     printf("\n====== INIZIO DEL SENDER ======\n\n");
 	
@@ -46,17 +49,17 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	else{
 		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int))+1;
 	}
+	pkt=calloc(tot_pkts, sizeof(packet));
 	printf ("Numero Pacchetti: %d\n",tot_pkts);
 	lseek(fd, 0, SEEK_SET);
 
 	struct timeval end, start;
 	gettimeofday(&start, NULL);
-	//inizializzazione finestra di invio e primi pacchetti
-
 	for(i=0; i<tot_pkts; i++){
 		pkt[i].seq_num = i;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
 		if(pkt[i].pkt_dim==-1){
+			printf ("Ctrl4\n");
 			pkt[i].pkt_dim=0;
 		}
 	}
@@ -66,24 +69,58 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	//tot_sent=0;
 	//err_count=0;
     int num_packet_sent = 0;
-
-
+	int tot_acked = 0;
 
 	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
+		//WindowEnd = SendBase + N;
+		//send_window(socket, receiver_addr, pkt, lost_prob, N);
+		
+		//Invio dei oacchetti semplice senza finestra
+        if (sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)receiver_addr, addr_len)<0){
+			printf ("Packet error, pkt num: %d\n",num_packet_sent);
+			perror ("Error Message");
+			exit(-1);
+		}
+		else{
+			printf("Packet Sent Num: %d\n",num_packet_sent);
+		}
+        num_packet_sent++;	
+		/*if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)receiver_addr, &addr_len)<0){
+			printf("ACK NUMBER: %d\n\n",ack_num);
+			perror("ACK RECVFROM ERROR");
+		}
+		else {
+			printf("\nACK RICEVUTO: %d\n",ack_num);void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
+			printf("Ricevuto correttamente pkt: %d\n",ack_num-1);
+			printf("In attesa del packt numero: %d\n\n",ack_num);
+			tot_acked++;
+		}*/
+	}
+
+
+	// Ciclo funzionante su tutti i pkt (senza finestra e sendbase)
+	/*while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		//send_window(socket, receiver_addr, pkt, lost_prob, N);
         if (sendto(socket, pkt+num_packet_sent, PKT_SIZE, 0, (struct sockaddr *)receiver_addr, addr_len)<0){
 			printf ("Packet error, pkt num: %d\n",num_packet_sent);
+			perror ("Error Message");
 			exit(-1);
 		}
         num_packet_sent++;	
-		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)receiver_addr, &addr_len)){
+		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)receiver_addr, &addr_len)<0){
 			printf("ACK NUMBER: %d\n\n",ack_num);
-			perror("ACK RECVFROM ERROR:");
+			perror("ACK RECVFROM ERROR");
 		}
-	}
+		else {
+			printf("\nACK RICEVUTO: %d\n",ack_num);
+			printf("Ricevuto correttamente pkt: %d\n",ack_num-1);
+			printf("In attesa del packt numero: %d\n\n",ack_num);
+		}
+	}*/
 	
-	/* //fine trasmissione
+	//fine trasmissione
 	for(i=0; i<MAX_ERR; i++){
+		printf("Transmission end\n");
 		memset(buff, 0, PKT_SIZE);
 		((packet*)buff)->seq_num=-1;
 		if(sendto(socket, buff, sizeof(int), 0, (struct sockaddr *)receiver_addr, addr_len) > 0) {
@@ -95,56 +132,65 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			close(fd);
 			return;
 		}
-	} */
+	}
 	close(fd);
 	return;
 }
 
-/*void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
+//Invia tutti i pacchetti nella finestra
+void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
+	printf("\n====== INIZIO SEND WINDOW ======\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
-		for(i=base; i<=max; i++){
+	printf ("SendBase : %d\n",SendBase);
+	printf ("MaxWindow: %d\n",WindowEnd);
+	// Caso in cui la finestra non è ancora piena di pkt in volo
+	if(SendBase<WindowEnd){
+		printf("Case: SendBase<WindowEnd\n"); 
+		for(i=SendBase; i<=WindowEnd; i++){
 			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
-				if(correct_send(lost_prob)) {
-					while(sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0) {
-					    printf("Packet send error(1)\n");
-					}
-					//printf("Packet %d sent\n", pkt[i].seq_num);
+				printf ("check1\n");
+				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+					perror ("PACKET LOST (1)");
 				}
-				//else printf("Packet %d lost\n", pkt[i].seq_num);
+				else {
+					printf("Packet sent\n");
+				}
 				tot_sent++;
 				check_pkt[i]=1;
-			}
-		}
-	else{
-		for(i=base; i<N; i++){
-			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
-				if(correct_send(lost_prob)) {
-					while(sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0) {
-					    printf("Packet send error(2)\n");
-					}
-					//printf("Packet %d sent\n", pkt[i].seq_num);
 				}
-				//else printf("Packet %d lost\n", pkt[i].seq_num);
-				tot_sent++;
-				check_pkt[i]=1;
 			}
-		}
-		for(i=0; i<=max; i++){
-			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
-				if(correct_send(lost_prob)) {
-					while(sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0) {
-					    printf("Packet send error(3)\n");
-					}
-					//printf("Packet %d sent\n", pkt[i].seq_num);
-				}
-				//else printf("Packet %d lost\n", pkt[i].seq_num);
-				tot_sent++;
-				check_pkt[i]=1;
-			}
-		}
 	}
-}*/
+
+	//Caso in cui la finestra è piena, quindi viene spostata in avanti di N
+	else{
+		for(i=SendBase; i<N; i++){
+			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
+				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+					perror ("PACKET LOST (1)");
+				}
+				else {
+					printf("Packet sent\n");
+				}
+				tot_sent++;
+				check_pkt[i]=1;
+				}
+			}
+		for(i=0; i<=WindowEnd; i++){
+			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
+				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+					perror ("PACKET LOST (1)");
+				}
+				else {
+					printf("Packet sent\n");
+				}
+				tot_sent++;
+				check_pkt[i]=1;
+				}
+			}
+		}
+
+}
 
 /*int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritorna -1 se ci sono errori, 0 altrimenti
 	int i, ack_num=0, new_read=0;
@@ -165,10 +211,16 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 					check_pkt[i]=0; //ritrasmetto pacchetti finestra
 				}
 			}
-		}
-		else{
-			for(i=base; i<N; i++){
-				if(check_pkt[i] == 1) {
+		}			if(check_pkt[i]==0 && (tot_sent < tot_pkts)){
+				if(correct_send(lost_prob)) {
+					while(sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len) < 0) {
+					    printf("Packet send error(3)\n");
+					}
+					//printf("Packet %d sent\n", pkt[i].seq_num);
+				}
+				//else printf("Packet %d lost\n", pkt[i].seq_num);
+				tot_sent++;
+				check_pkt[i]=1;
 					tot_sent--;
 					check_pkt[i]=0; //ritrasmetto pacchetti finestra
 				}
