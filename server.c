@@ -224,7 +224,7 @@ int main(int argc, char **argv){
                   }
                 free(buff);
                 free(path);
-                close(child_sock);
+                close(server_sock);
                 return 1;
               }
               //comunico al client che il file è presente e può essere scaricato

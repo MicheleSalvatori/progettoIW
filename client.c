@@ -102,9 +102,8 @@ menu:
 			snprintf(aux, 12+strlen(buff)+1, "clientFiles/%s", buff);
 			fd = open(aux, O_RDONLY);
 			if(fd>0){
-				printf("CLIENT: The file already exists\n");
-				close(fd);
-				exit(-1);
+				printf("File già presente nella directory locale. Il File verrà sovrascritto.\n");
+				remove(aux);
 			}
 			close(fd);
 

@@ -12,18 +12,28 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-
+#define WIN_SIZE 5
 
 int error_count;
 int *check_pkt;
 int base, max, window;
+int ReceiveBase;
+int WindowEnd;
+int seq_num = 0;
+int new_write = 0;
 packet pkt_aux;
 packet *pkt;
+void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int fd, int N);
+
+void inputs_wait(char *s){
+	char c;
+	printf("%s\n", s);
+	while (c = getchar() != '\n');
+}
 
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
 	socklen_t addr_len=sizeof(struct sockaddr_in);
 	off_t file_dim;
-    int seq_num, new_write;
 	long i = 0;
 	
 
@@ -31,150 +41,83 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	printf("File transfer started\nWait...\n");
 
 	pkt=calloc(6000, sizeof(packet));		// al posto di 6000 va la dim finestra
+	check_pkt=calloc(6000, sizeof(packet));
 	memset(&pkt_aux, 0, sizeof(packet));
-
-	new_write = 0;
-	seq_num = 0;
+	
+	ReceiveBase = 0;
 
 	while(seq_num!=-1){//while ho pachetti da ricevere
-		// recv_window(socket, sender_addr, pkt, fd, N);
-	
-	
-
-        if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
-			perror("Error receive pkt\n");
-			error_count++;
-			return -1;
-	    }
-		if (pkt_aux.seq_num == -1){
-			seq_num = -1;
-			break;
-		}
-
-		
-		seq_num = pkt_aux.seq_num;
-		printf("CLIENT: pkt ricevuto %d\n", seq_num);
-		memset(pkt+seq_num, 0, sizeof(packet));
-		pkt[seq_num] = pkt_aux;
-		++new_write;
-
-
-		/*
-		else{
-			printf("File received\n\n");
-			seq_num = pkt[new_write].seq_num;
-			int ack_num = seq_num+1;
-			sendto(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)sender_addr, addr_len); //Invio ACK con seq del prossimo pkt atteso
-			printf("CLIENT: pkt ricevuto %d\n", seq_num);
-			new_write++;
-		}
-		*/
-
-	memset(&pkt_aux, 0, sizeof(packet));
-
+		printf("SeqNum: %d\n",seq_num);
+		WindowEnd = ReceiveBase + WIN_SIZE-1;
+		recv_window(socket, sender_addr, pkt, fd, WIN_SIZE);
 	}
 
 	//scrittura nuovi pacchetti
-	printf("Inizio scrittura file\nPacchetti da scrivere: %d\n", new_write);
+	printf("====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", new_write);
 	for(i=0; i<new_write; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
-		printf("Scritto pkt %d, %ld\n", pkt[i].seq_num, i);
+		printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);
 		// base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
 		// max=(base+window-1)%N;
 	}
+	printf("============================\n");
 }
 	
 
-/*
 void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int fd, int N){
-	int i, new_write=0, seq_num;
+	int i;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
-
+	printf("\n====== INIZIO RECV WINDOW ======\n\n");
+	printf ("ReceiveBase : %d\n",ReceiveBase);
+	printf ("WindowEnd: %d\n",WindowEnd);
+	printf("\n================================\n\n");
+	
 	memset(&pkt_aux, 0, sizeof(packet));
+	printf("ctrl (1)\n");
 
-	if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len)<0) && (error_count<MAX_ERR)) {
-		//printf("error receive pkt\n");
-		error_count++;
-		if(ADAPTIVE) {
-			increase_timeout(socket);
-		}
+	if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len)<0)) {
+		printf("error receive pkt\n");
 		return;
 	}
-	if(ADAPTIVE) {
-		decrease_timeout(socket);
-	}
-	error_count = 0;
-
 	//se è il pacchetto di fine file, termino
+	seq_num = pkt_aux.seq_num;
 	if(pkt_aux.seq_num==-1) {
+		printf("ctrl (9)\n");
 		return;
 	}
-	seq_num = pkt_aux.seq_num;
-	//printf("pkt ricevuto %d\n", seq_num);
+	printf("pkt ricevuto %d\n", seq_num);
+
+	if(check_pkt[seq_num]==1){ //se è interno, lo scarto se gia ACKato
+		printf("ctrl (6)\n");
+		return;
+	}
+	if(WindowEnd<seq_num && seq_num<ReceiveBase){
+		printf("ctrl (7)\n");
+		return;
+	}
+	else if(check_pkt[seq_num]==1){ //se è interno, lo scarto se gia ACKato
+		printf("ctrl (8)\n");
+		return;
+	}
 
 	//invio ack del pacchetto seq_num
-	if(correct_send(LOST_PROB)){
-		if(sendto(socket, &seq_num, sizeof(int), 0, (struct sockaddr *)client_addr, addr_len) < 0) {
-			//printf("Error send ack\n");
-		}
-		//printf("ack inviato %d\n", seq_num);
+	if(sendto(socket, &seq_num, sizeof(int), 0, (struct sockaddr *)client_addr, addr_len) < 0) {
+		printf("Error send ack\n");
+		perror("ERRORE");
+		return;
 	}
+	printf("ack inviato %d\n", seq_num);
+	ReceiveBase++;							//VEDERE DOVE VA INCREMENTATA
+	new_write++;
 
-	if(base<max){		//se mi arriva un pacchetto esterno alla finestra, lo scarto
-		if(((0<=seq_num) && (seq_num<base)) || ((max<seq_num) && (seq_num<N))){
-			return;
-		}
-		else if(check_pkt[seq_num]==1){//se è interno, lo scarto se gia ACKato
-			return;
-		}
-	}
-	else{			//se mi arriva un pacchetto esterno alla finestra, lo scarto
-		if(max<seq_num && seq_num<base){
-			return;
-		}
-		else if(check_pkt[seq_num]==1){//se è interno, lo scarto se gia ACKato
-			return;
-		}
-	}
-
+	printf("ctrl (3)\n");
 	memset(pkt+pkt_aux.seq_num, 0, sizeof(packet));
+	printf("ctrl (4)\n");
+	printf("aux seq num: %d\n",pkt_aux.seq_num);
 	pkt[pkt_aux.seq_num] = pkt_aux;
+	printf("ctrl (a)\n");
 	check_pkt[pkt_aux.seq_num] = 1;
-
-	//setto new_write al numero di pacchetti da scrivere sul file
-	if(base<max){
-		for(i=base; i<=max; i++) {
-			if(check_pkt[i]==1) {
-				check_pkt[i]=0; //reset variabile di controllo
-				new_write++; //aumento di uno i pacchetti che dovrò scrivere sul file
-			}
-			else{
-				break;
-			}
-		}
-	}
-	else{
-		for(i=base; i<N; i++) {
-			if(check_pkt[i]==1) {
-				check_pkt[i]=0; //reset variabile di controllo
-				new_write++; //aumento di uno i pacchetti che dovrò leggere dal file
-			}
-			else{
-				break;
-			}
-		}
-		if(window-new_write==max+1){//se i check==2 ancora possibili sono pari alla posizione max+1
-			for(i=0; i<=max; i++) {
-				if(check_pkt[i]==1) {
-					check_pkt[i]=0; //reset variabile di controllo
-					new_write++; //aumento di uno i pacchetti che dovrò leggere dal file
-				}
-				else{
-					break;
-				}
-			}
-		}
-	}
-	*/
+	printf("ctrl (b)\n");
+}
 
 
