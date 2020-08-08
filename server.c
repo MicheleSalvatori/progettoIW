@@ -130,7 +130,7 @@ int main(int argc, char **argv){
 
 		// input_wait("Premere invio dopo connessione client\n");
     while (1) {
-      set_timeout(server_sock, 0);//recvfrom all'inizio è bloccante (si fa con timeout==0)
+      //set_timeout(server_sock, 0);//recvfrom all'inizio è bloccante (si fa con timeout==0)
 
       // vedere bene server_reliable_conn
       if (server_reliable_conn(server_sock, &client_address) == 0) {//se un client non riesce a ben connettersi, il server non forka
@@ -145,7 +145,6 @@ int main(int argc, char **argv){
 
 
           control = sendto(server_sock, READY, strlen(READY), 0, (struct sockaddr *)&client_address, addr_len);
-					printf("%s SERVER: Server Ready to connect\n", time_stamp());
 					printf("====================================================");
           if (control < 0){
 						perror("Ready error");
@@ -164,6 +163,7 @@ int main(int argc, char **argv){
             // close(serv)attesa syn;
             return 0;
           }
+          printf ("Command Received: %d\n",*buff);
 
           switch(*(int*)buff) {
 
@@ -194,13 +194,18 @@ int main(int argc, char **argv){
               /*if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
                 printf("Errore invio messaggio\n");
               }*/
-
-							close(fd);
+							if (close(fd)<0){
+                printf ("File closing error with fd = %d\n",fd);
+                perror("error (1)");
+              }
+              else {
+                printf ("File closed\n");
+              }
 							remove("file_list.txt");
 							break;
 
             case GET:
-              printf("SERVER %d: DOWNLOAD request\n", pid);
+              printf("SERVER: DOWNLOAD request\n");
               //set_timeout_sec(child_sock, SELECT_FILE_SEC); //Voglio sapere il nome del file
               memset(buff, 0, sizeof(buff));
               control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&client_address, &addr_len); 
@@ -215,6 +220,8 @@ int main(int argc, char **argv){
               //+1 per lo /0 altrimenti lo sostituisce a ultimo carattere
               snprintf(path, 12+strlen(buff)+1, "serverFiles/%s", buff); 
               fd = open(path, O_RDONLY);
+              printf("PATH: %s\n",path);
+              printf("FD  : %d\n",fd);
               if(fd == -1){
                 printf("SERVER %d: file not found\n", pid);
                 //comunico al client che il file non è presente
@@ -234,8 +241,15 @@ int main(int argc, char **argv){
                 }
               //set_timeout(child_sock, TIMEOUT_PKT);
               sender(server_sock, &client_address, FLYING, LOST_PROB, fd);
-              close(fd);
-              break;
+              if (close(fd)<0){
+                printf ("File closing error with fd = %d\n",fd);
+                perror("error (2)");
+              }
+              else {
+                printf ("File closed\n");
+              }
+            
+              break;     
   					}
             goto request;
         }

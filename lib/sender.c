@@ -2,6 +2,8 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/time.h>
+#include <pthread.h>
+#include <stdbool.h>
 
 #include <unistd.h>
 #include <stdio.h>
@@ -12,14 +14,54 @@
 #include <fcntl.h>
 #include "comm.h"
 
-//TODO al secondo download (GET) senza disconnessione resta la vecchia sendbase
+pthread_t thread;
+struct thread_args
+ {
+    struct sockaddr_in *client_addr;
+    socklen_t addr_len;
+	int socket;
+};
+
+//TODO al secondo download (GET) senza disconnessione resta la vecchia sendbase mentre il numero di pacchetti è calcolato giusto, vedi output!!
 //TODO non funziona piu il comando list perchè sendbase=windowend=0
 
-#define WIN_SIZE 5 			//Dimensione della finestra di trasmissione;
+#define WIN_SIZE 32 			//Dimensione della finestra di trasmissione;
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
 //#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
 
+int SendBase = 0;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
+int NextSeqNum = 0;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
+int ack_num;
+int tot_acked = 0;
+int tot_pkts = 0;
+bool fileTransfer = true;
+
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
+
+void *receive_ack(void *arg){
+	printf ("______ THREAD CREATED ______\n");
+	struct thread_args *args = arg;
+	socklen_t addr_len = args->addr_len;
+	struct sockaddr_in *client_addr = args->client_addr;
+	int socket = args->socket;
+
+	while(fileTransfer){
+		printf ("______ THREAD In attesa di ACK ______\nFileTransfer = %d\n",fileTransfer);
+		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)client_addr, &addr_len) < 0){
+			perror ("Errore ricezione ack");
+		}
+		else {
+			printf("Ricevuto ACK num: %d\n\n",ack_num);
+			SendBase++;
+			NextSeqNum++;
+			tot_acked++;
+			if (tot_acked == tot_pkts){
+				fileTransfer = false;
+			}
+		}
+	}
+
+}
 
 void input_wait(char *s){
 	char c;
@@ -28,13 +70,8 @@ void input_wait(char *s){
 }
 
 int *check_pkt;
-int tot_pkts, tot_ack, num_packet_sent;
-int base, max, window;
-int ack_num;
-
-int SendBase = 0;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
-int NextSeqNum = 0;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
-int WindowEnd = WIN_SIZE-1;		
+int num_packet_sent;
+int base, max, window;	
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
@@ -42,19 +79,29 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	char *buff = calloc(PKT_SIZE, sizeof(char));
 	int i, new_read;
 	off_t file_dim;
+
+	struct thread_args t_args;
+	t_args.addr_len = addr_len;
+	t_args.client_addr = receiver_addr;
+	t_args.socket = socket;
+
+	
+	int ret = pthread_create(&thread,NULL,receive_ack,(void*)&t_args); //Creazione thread per ascolto ricezione ack
 	
 	srand(time(NULL));
-
-    printf("\n====== INIZIO DEL SENDER ======\n\n");
 	
 	//calcolo tot_pkts
 	file_dim = lseek(fd, 0, SEEK_END);
 	if(file_dim%(PKT_SIZE-sizeof(int)-sizeof(short int))==0){
+		printf ("Calcolo tot_pkts\n");
 		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int));
 	}
 	else{
+		printf ("Calcolo tot_pkts\n");
 		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int))+1;
 	}
+	printf("\n====== INIZIO DEL SENDER | PKTS: %d ======\n\n",tot_pkts);
+
 	pkt=calloc(tot_pkts, sizeof(packet));
 	check_pkt=calloc(tot_pkts, sizeof(int));//0=da inviare, 1 inviato non ackato, 2 ackato. non serve che ruoti.		//MOMENTANEO
 
@@ -64,7 +111,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	struct timeval end, start;
 	gettimeofday(&start, NULL);
 
-	// Preparazione primi WIN_SIZE pkt
+	// Assegno i seq num ai pkt
 	for(i=0; i<tot_pkts; i++){
 		pkt[i].seq_num = i;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
@@ -74,19 +121,15 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	}
 
 	//inizio trasmissione
-	//tot_ack=0;
 	//tot_sent=0;
 	//err_count=0;
     num_packet_sent = 0;
-	int tot_acked = 0;
 
-	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
-		WindowEnd = SendBase + WIN_SIZE-1;
-		if (WindowEnd >= tot_pkts){		// DA CAMBIARE
-			WindowEnd = tot_pkts;	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
+	while(tot_acked<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
+		if (SendBase+WIN_SIZE-1 >= tot_pkts){		// DA CAMBIARE
+			SendBase = tot_pkts-(WIN_SIZE-1);	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
 		}
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
-		input_wait("premi invio\n");
 	}
 	
 	//fine trasmissione
@@ -101,12 +144,17 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			double tp=file_dim/tm;
 			printf("Transfer time: %f sec [%f KB/s]\n", tm, tp/1024);
 			printf("===========================\n");
-			close(fd);
+			tot_pkts = 0;
+			if (close(fd)<0){
+                printf ("File closing error with fd = %d\n",fd);
+                perror("error (2)");
+              }
+              else {
+                printf ("File closed\n");
+              }
 			return;
 		}
 	}
-	close(fd);
-	return;
 }
 
 //Invia tutti i pacchetti nella finestra
@@ -114,34 +162,30 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 
 	printf("\n====== INIZIO SEND WINDOW ======\n\n");
 	printf ("SendBase : %d\n",SendBase);
-	printf ("WindowEnd: %d\n",WindowEnd);
+	printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
 	printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
-
+	input_wait("enter");
 
 	// Caso in cui la finestra non è ancora piena di pkt in volo
-	if(NextSeqNum<WindowEnd){
-		for(i=NextSeqNum; i<=WindowEnd; i++){
+	if(NextSeqNum<SendBase+WIN_SIZE-1){
+		for(i=NextSeqNum; i<=SendBase+WIN_SIZE-1; i++){
+			printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
 			if(check_pkt[i]==0 && (num_packet_sent< tot_pkts)){
 				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror ("PACKET LOST (1)");
 				}
 				else {
 					printf("Inviato PKT num : %d\n", pkt[i].seq_num);
-				}
-				if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)client_addr, &addr_len) < 0){
-					perror ("Errore ricezione ack");
-				}
-				else {
-					printf("Ricevuto ACK num: %d\n\n",ack_num);
-				}
-				SendBase++;
-				NextSeqNum++;
-				num_packet_sent++;
-				check_pkt[i]=1;
+					num_packet_sent++;check_pkt[i]=1;
 				}
 			}
+		}
+		printf("\n====== FINE SEND WINDOW ======\n\n");
+		printf ("SendBase : %d\n",SendBase);
+		printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
+		printf("\n================================\n\n");
 
 	}
 
