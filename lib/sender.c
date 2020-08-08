@@ -13,6 +13,7 @@
 #include "comm.h"
 
 //TODO al secondo download (GET) senza disconnessione resta la vecchia sendbase
+//TODO non funziona piu il comando list perchè sendbase=windowend=0
 
 #define WIN_SIZE 5 			//Dimensione della finestra di trasmissione;
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
@@ -27,14 +28,13 @@ void input_wait(char *s){
 }
 
 int *check_pkt;
-int err_count;//conta quante volte consecutivamente è fallita la ricezione
 int tot_pkts, tot_ack, num_packet_sent;
 int base, max, window;
 int ack_num;
 
-int SendBase = 0;		// Base della finestra di trasmissione (pkt piu vecchio non acked)
-int NextSeqNum = 0;
-int WindowEnd = WIN_SIZE-1;		// Seq number atteso (ult)
+int SendBase = 0;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
+int NextSeqNum = 0;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
+int WindowEnd = WIN_SIZE-1;		
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
@@ -83,7 +83,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	while(num_packet_sent<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		WindowEnd = SendBase + WIN_SIZE-1;
 		if (WindowEnd >= tot_pkts){		// DA CAMBIARE
-			WindowEnd = tot_pkts-1;
+			WindowEnd = tot_pkts;	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
 		}
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 		input_wait("premi invio\n");
@@ -121,8 +121,8 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 
 
 	// Caso in cui la finestra non è ancora piena di pkt in volo
-	if(SendBase<WindowEnd){
-		for(i=SendBase; i<=WindowEnd; i++){
+	if(NextSeqNum<WindowEnd){
+		for(i=NextSeqNum; i<=WindowEnd; i++){
 			if(check_pkt[i]==0 && (num_packet_sent< tot_pkts)){
 				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror ("PACKET LOST (1)");
@@ -137,6 +137,7 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 					printf("Ricevuto ACK num: %d\n\n",ack_num);
 				}
 				SendBase++;
+				NextSeqNum++;
 				num_packet_sent++;
 				check_pkt[i]=1;
 				}

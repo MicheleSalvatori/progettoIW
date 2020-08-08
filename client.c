@@ -75,9 +75,9 @@ menu:
 		if (end_file >0){
 		lseek(fd, 0, SEEK_SET);
 		read(fd, buff, end_file);
-				printf("\n==================== FILE LIST =====================\n");
+		printf("\n==================== FILE LIST =====================\n");
 		printf("%s", buff);
-				printf("====================================================\n");
+		printf("====================================================\n");
 
 		close(fd);
 		remove("clientFiles/file_list.txt");
