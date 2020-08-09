@@ -24,6 +24,7 @@ struct thread_args
 
 //TODO al secondo download (GET) senza disconnessione resta la vecchia sendbase mentre il numero di pacchetti è calcolato giusto, vedi output!!
 //TODO non funziona piu il comando list perchè sendbase=windowend=0
+//TODO rimettere windowend perche almeno imposto la dimensione della finestra al minimo se < WIN SIZE pkt totali
 
 #define WIN_SIZE 32 			//Dimensione della finestra di trasmissione;
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
@@ -35,6 +36,15 @@ int ack_num;
 int tot_acked = 0;
 int tot_pkts = 0;
 bool fileTransfer = true;
+
+void send_reset(){ // Per trasferire un nuovo file senza disconnessione
+	SendBase = 0;
+	NextSeqNum = 0;
+	ack_num = 0;
+	tot_acked = 0;
+	tot_pkts = 0;	
+	fileTransfer = true;
+}
 
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
 
@@ -52,10 +62,9 @@ void *receive_ack(void *arg){
 		}
 		else {
 			printf("Ricevuto ACK num: %d\n\n",ack_num);
-			SendBase++;
-			NextSeqNum++;
-			tot_acked++;
-			if (tot_acked == tot_pkts){
+			SendBase = ack_num+1;
+			tot_acked = ack_num;
+			if (tot_acked == tot_pkts-1){
 				fileTransfer = false;
 			}
 		}
@@ -75,6 +84,8 @@ int base, max, window;
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
+	send_reset();
+	printf ("SENDER SEND BASE: %d\n",SendBase);
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 	char *buff = calloc(PKT_SIZE, sizeof(char));
 	int i, new_read;
@@ -121,19 +132,18 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	}
 
 	//inizio trasmissione
-	//tot_sent=0;
-	//err_count=0;
     num_packet_sent = 0;
 
-	while(tot_acked<tot_pkts){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
-		if (SendBase+WIN_SIZE-1 >= tot_pkts){		// DA CAMBIARE
+	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
+		printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
+		if (SendBase+WIN_SIZE-1 >= tot_pkts && tot_pkts >= WIN_SIZE){		// DA CAMBIARE
 			SendBase = tot_pkts-(WIN_SIZE-1);	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
 		}
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
 	
 	//fine trasmissione
-	for(i=0; i<MAX_ERR; i++){
+	for(i=0; i<MAX_ERR; i++){ //Perche i<MAX_ERR? non ci serve
 		printf("====== Transmission end =======\n");
 		memset(buff, 0, PKT_SIZE);
 		((packet*)buff)->seq_num=-1;
@@ -166,33 +176,36 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
-	input_wait("enter");
+	//input_wait("enter");
 
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 	if(NextSeqNum<SendBase+WIN_SIZE-1){
 		for(i=NextSeqNum; i<=SendBase+WIN_SIZE-1; i++){
-			printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
 			if(check_pkt[i]==0 && (num_packet_sent< tot_pkts)){
 				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror ("PACKET LOST (1)");
 				}
 				else {
 					printf("Inviato PKT num : %d\n", pkt[i].seq_num);
-					num_packet_sent++;check_pkt[i]=1;
+					num_packet_sent++;
+					if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
+						NextSeqNum++;
+					}
+					
+					printf("NextSeqNum: %d\n",NextSeqNum);
+					check_pkt[i]=1;
 				}
 			}
+			if (tot_pkts == 1){ //TEMPORANEO E SBAGLIATO
+				fileTransfer = false;
+				break;
+			}
 		}
-		printf("\n====== FINE SEND WINDOW ======\n\n");
-		printf ("SendBase : %d\n",SendBase);
-		printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
-		printf("\n================================\n\n");
-
 	}
-
-
-
-
-
+	printf("\n====== FINE SEND WINDOW ======\n\n");
+	printf ("SendBase : %d\n",SendBase);
+	printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
+	printf("\n================================\n\n");
 }
 
 /*int recv_ack(int socket, struct sockaddr_in *client_addr, int fd, int N){//ritorna -1 se ci sono errori, 0 altrimenti

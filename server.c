@@ -194,13 +194,6 @@ int main(int argc, char **argv){
               /*if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
                 printf("Errore invio messaggio\n");
               }*/
-							if (close(fd)<0){
-                printf ("File closing error with fd = %d\n",fd);
-                perror("error (1)");
-              }
-              else {
-                printf ("File closed\n");
-              }
 							remove("file_list.txt");
 							break;
 
@@ -240,15 +233,7 @@ int main(int argc, char **argv){
                     return 1;
                 }
               //set_timeout(child_sock, TIMEOUT_PKT);
-              sender(server_sock, &client_address, FLYING, LOST_PROB, fd);
-              if (close(fd)<0){
-                printf ("File closing error with fd = %d\n",fd);
-                perror("error (2)");
-              }
-              else {
-                printf ("File closed\n");
-              }
-            
+              sender(server_sock, &client_address, FLYING, LOST_PROB, fd);          
               break;     
   					}
             goto request;

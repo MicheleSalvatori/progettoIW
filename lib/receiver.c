@@ -21,15 +21,26 @@ int *check_pkt;
 int base, max, window;
 int ReceiveBase;
 int WindowEnd;
+int sock;
 int seq_num = 0;
 int new_write = 0;
 int expected_seq_num = 0;
 packet pkt_aux;
 packet *pkt;
+socklen_t addr_len = sizeof(struct sockaddr_in);
+struct sockaddr_in *client_addr;
 
 void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int fd, int N);
 void alarm_routine();
-void checkSegment( struct sockaddr_in *, int);
+void checkSegment( struct sockaddr_in *, int socket);
+
+void recv_reset(){ // Per trasferire un nuovo file senza disconnessione
+	ReceiveBase = 0;
+	WindowEnd = 0;
+	seq_num = 0;
+	expected_seq_num = 0;
+	new_write = 0;
+}
 
 void inputs_wait(char *s){
 	char c;
@@ -38,7 +49,10 @@ void inputs_wait(char *s){
 }
 
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
+	recv_reset();
+	sock = socket;
 	socklen_t addr_len=sizeof(struct sockaddr_in);
+	client_addr = sender_addr;
 	off_t file_dim;
 	long i = 0;
 	
@@ -64,7 +78,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 			return -1;
 		}
 		seq_num = pkt_aux.seq_num;
-		printf("SeqNum: %d\n",seq_num);
+		printf("Ricevuto PKT | SeqNum: %d\n",seq_num);
 		checkSegment(sender_addr, socket);
 	}
 
@@ -86,7 +100,6 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 
 	struct itimerval it_val;
 	packet new_pkt;
-	socklen_t addr_len = sizeof(struct sockaddr_in);
 	int lastToAck = 0;
 
 	signal(SIGALRM, alarm_routine);
@@ -109,8 +122,8 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 
 
 		// SETTAGGIO TIMER
-		it_val.it_value.tv_sec = 2;
-    	it_val.it_value.tv_usec = 0;
+		it_val.it_value.tv_sec = 0;
+    	it_val.it_value.tv_usec = 200000;
     	it_val.it_interval.tv_sec = 0;
 	    it_val.it_interval.tv_usec = 0;
 		if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
@@ -132,8 +145,8 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	   			it_val.it_interval.tv_usec = 0;
 
 				if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
-				perror("setitimer");
-				exit(1);
+					perror("setitimer");
+					exit(1);
 				}
 				return;
 			}
@@ -156,21 +169,24 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				}
 			printf("Timer Resettato\n");
 		}
-
-		// INVIO ACK CUMULATIVO 
-		if(sendto(socket, &new_pkt.seq_num, sizeof(int), 0, (struct sockaddr *)client_addr, addr_len) < 0) {
-			perror("Error send ack\n");
-			return;
-			}
-		else{ 
-			printf("Ack inviato: %d\n", seq_num);
-		}
-
 	}
 }
 
-void alarm_routine(){
-	printf("\n\nTimeout exipered next packed not found\n");
+// INVIO ACK CUMULATIVO
+void send_cumulative_ack(){			
+	printf ("==========INVIO ACK CUMULATIVO===========\n");
+	if(sendto(sock, &seq_num, sizeof(int), 0, (struct sockaddr *)client_addr, addr_len) < 0) {
+		perror("Error send ack\n");
+		return;
+		}
+	else{ 
+		printf("Ack inviato: %d\n", seq_num);
+	}
+}
+
+void alarm_routine(packet new_pkt,struct sockaddr_in *client_addr,socklen_t addr_len){
+	printf("\n\nTimer Scaduto, nessun pacchetto da inviare trovato.\n");
+	send_cumulative_ack(new_pkt,(struct sockaddr *)client_addr,addr_len);
 	return;
 }
 
