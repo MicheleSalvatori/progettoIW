@@ -14,19 +14,17 @@
 #include <signal.h>
 #include <fcntl.h>
 
+#include "utility.c"
+
 #define WIN_SIZE 5
 
 int error_count;
 int *check_pkt;
 int base, max, window;
-int ReceiveBase;
-int WindowEnd;
+int ReceiveBase, WindowEnd;
 int sock;
-int seq_num = 0;
-int new_write = 0;
-int expected_seq_num = 0;
-packet pkt_aux;
-packet *pkt;
+int seq_num, new_write, expected_seq_num;
+packet pkt_aux, *pkt;
 socklen_t addr_len = sizeof(struct sockaddr_in);
 struct sockaddr_in *client_addr;
 
@@ -42,11 +40,6 @@ void recv_reset(){ // Per trasferire un nuovo file senza disconnessione
 	new_write = 0;
 }
 
-void inputs_wait(char *s){
-	char c;
-	printf("%s\n", s);
-	while (c = getchar() != '\n');
-}
 
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
 	recv_reset();
@@ -120,17 +113,8 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 		memset(pkt+seq_num, 0, sizeof(packet));
 		pkt[pkt_aux.seq_num] = pkt_aux;
 
-
 		// SETTAGGIO TIMER
-		it_val.it_value.tv_sec = 0;
-    	it_val.it_value.tv_usec = 200000;
-    	it_val.it_interval.tv_sec = 0;
-	    it_val.it_interval.tv_usec = 0;
-		if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
-  			perror("setitimer");
-			exit(1);
-			}
-		printf("Timer avviato\n");
+		set_timer(2000);
 
 		// Per ogni pacchetto ordinato correttamente ricevuto riparte il timer di 500ms
 		while(recvfrom(socket, &new_pkt, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len)){
@@ -139,15 +123,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 			if(new_pkt.seq_num ==-1) {
 				seq_num = -1;
 				// STOPPO IL TIMER -> DOWNLOAD TERMINATO
-				it_val.it_value.tv_sec = 0;
-    			it_val.it_value.tv_usec = 0;
-    			it_val.it_interval.tv_sec = 0;
-	   			it_val.it_interval.tv_usec = 0;
-
-				if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
-					perror("setitimer");
-					exit(1);
-				}
+				set_timer(0);
 				return;
 			}
 
@@ -163,11 +139,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				break;
 			}
 			// reset timer
-			if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
-				perror("setitimer");
-				exit(1);
-				}
-			printf("Timer Resettato\n");
+			set_timer(200000);
 		}
 	}
 }
