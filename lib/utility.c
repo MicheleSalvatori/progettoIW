@@ -34,7 +34,7 @@ void inputs_wait(char *s){
 // Genera un numero casuale e ritorna true o false in base alla probabilita di perdita passata in input
 bool is_packet_lost(int prob){
   int random = rand() %100;
-  printf ("Random Number: %d\n",random);
+ // printf ("Random Number: %d\n",random);
   if (random<=prob){
 	  return true;
   }
