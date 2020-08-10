@@ -32,7 +32,7 @@ void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int f
 void alarm_routine();
 void checkSegment( struct sockaddr_in *, int socket);
 
-void recv_reset(){ // Per trasferire un nuovo file senza disconnessione
+void initialize_recv(){ // Per trasferire un nuovo file senza disconnessione
 	ReceiveBase = 0;
 	WindowEnd = 0;
 	seq_num = 0;
@@ -42,7 +42,7 @@ void recv_reset(){ // Per trasferire un nuovo file senza disconnessione
 
 
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
-	recv_reset();
+	initialize_recv();
 	sock = socket;
 	socklen_t addr_len=sizeof(struct sockaddr_in);
 	client_addr = sender_addr;

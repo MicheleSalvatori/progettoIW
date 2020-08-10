@@ -12,6 +12,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <sys/param.h>
 #include "comm.h"
 
 pthread_t thread;
@@ -30,14 +31,14 @@ struct thread_args
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
 //#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
 
-int SendBase = 0;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
-int NextSeqNum = 0;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
+int SendBase;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
+int NextSeqNum;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
 int ack_num;
-int tot_acked = 0;
-int tot_pkts = 0;
+int tot_acked;
+int tot_pkts;
 bool fileTransfer = true;
 
-void send_reset(){ // Per trasferire un nuovo file senza disconnessione
+void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	SendBase = 0;
 	NextSeqNum = 0;
 	ack_num = 0;
@@ -69,7 +70,6 @@ void *receive_ack(void *arg){
 			}
 		}
 	}
-
 }
 
 void input_wait(char *s){
@@ -84,7 +84,7 @@ int base, max, window;
 packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
-	send_reset();
+	initialize_send();
 	printf ("SENDER SEND BASE: %d\n",SendBase);
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 	char *buff = calloc(PKT_SIZE, sizeof(char));
@@ -169,19 +169,24 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 
 //Invia tutti i pacchetti nella finestra
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
+	int cycle_end;
+	cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
 
 	printf("\n====== INIZIO SEND WINDOW ======\n\n");
 	printf ("SendBase : %d\n",SendBase);
-	printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
+	printf ("WindowEnd: %d\n",cycle_end);
 	printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
+	
 	//input_wait("enter");
 
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 	if(NextSeqNum<SendBase+WIN_SIZE-1){
-		for(i=NextSeqNum; i<=SendBase+WIN_SIZE-1; i++){
-			if(check_pkt[i]==0 && (num_packet_sent< tot_pkts)){
+		
+		for(i=NextSeqNum; i<cycle_end; i++){
+			cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+			if(check_pkt[i]==0){
 				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror ("PACKET LOST (1)");
 				}
@@ -195,10 +200,6 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 					printf("NextSeqNum: %d\n",NextSeqNum);
 					check_pkt[i]=1;
 				}
-			}
-			if (tot_pkts == 1){ //TEMPORANEO E SBAGLIATO
-				fileTransfer = false;
-				break;
 			}
 		}
 	}
