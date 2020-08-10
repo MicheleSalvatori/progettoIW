@@ -42,8 +42,8 @@ int *check_pkt;
 packet *pkt;
 
 void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
-	SendBase = 0;
-	NextSeqNum = 0;
+	SendBase = 1;
+	NextSeqNum = 1;
 	ack_num = 0;
 	tot_acked = 0;
 	tot_pkts = 0;	
@@ -65,9 +65,9 @@ void *receive_ack(void *arg){
 			perror ("Errore ricezione ack");
 			exit(-1);
 		}
-		printf ("THREAD: Ricevuto ACK | DuplicateAckCount = %d\n",duplicate_ack_count);
+		// printf ("THREAD: Ricevuto ACK | DuplicateAckCount = %d\n",duplicate_ack_count);
 		if (ack_num+1>SendBase){
-			printf("Ricevuto ACK num: %d\n\n",ack_num);
+			printf("Ricevuto ACK num: %d\nDuplicateAckCount: %d\n",ack_num, duplicate_ack_count);
 			SendBase = ack_num+1;
 			tot_acked = ack_num;
 			duplicate_ack_count = 1;
@@ -80,10 +80,11 @@ void *receive_ack(void *arg){
 			duplicate_ack_count++;
 			if (duplicate_ack_count == 3){
 				printf ("\n\n !!! TRE ACK DUPLICATI !!! | ACK: %d\n\n",ack_num);
-				printf ("FAST RETRANSMISSION PKT: %d\n",(pkt+ack_num+1)->seq_num);
-				if (sendto(socket, pkt+ack_num+1, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+				if (sendto(socket, pkt+ack_num, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror("Errore ritrasmissione pkt");
-				};
+				}else{
+					printf("FAST RETRANSMIT -> pkt: %d\n", (pkt+ack_num)->seq_num);
+				}
 				duplicate_ack_count = 1;
 			}
 		}
@@ -137,7 +138,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 
 	// Assegno i seq num ai pkt
 	for(i=0; i<tot_pkts; i++){
-		pkt[i].seq_num = i;
+		pkt[i].seq_num = i+1;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
@@ -192,11 +193,11 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 	
 	//input_wait("enter");
-
+	printf("%d<%d\n",NextSeqNum, SendBase+WIN_SIZE-1);
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 	if(NextSeqNum<SendBase+WIN_SIZE-1){
 		
-		for(i=NextSeqNum; i<cycle_end; i++){
+		for(i=NextSeqNum-1; i<cycle_end; i++){					// ho messo -1 non so perchè
 			cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
 			if(check_pkt[i]==0){
 				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
@@ -207,15 +208,14 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 					if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
 						NextSeqNum++;
 					}
-					
-					printf("NextSeqNum: %d\n",NextSeqNum);
+					// printf("NextSeqNum: %d\n",NextSeqNum);
 					check_pkt[i]=1;
 				}
 			}
 		}
 	}
 	printf("\n====== FINE SEND WINDOW ======\n\n");
-	printf ("SendBase : %d\n",SendBase);
-	printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
-	printf("\n================================\n\n");
+	// printf ("SendBase : %d\n",SendBase);
+	// printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
+	// printf("\n================================\n\n");
 }

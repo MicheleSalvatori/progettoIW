@@ -21,7 +21,7 @@ void set_timer(int time){
   			perror("setitimer");
 			exit(1);
 			}
-		printf("Timer avviato\n");
+		// printf("Timer avviato\n");
 }
 
 // Utilizzata per il debug e l'analisi dei pacchetti inviati
