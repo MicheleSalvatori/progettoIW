@@ -57,8 +57,6 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	pkt=calloc(6000, sizeof(packet));		// al posto di 6000 va la dim finestra
 	check_pkt=calloc(6000, sizeof(packet));
 	memset(&pkt_aux, 0, sizeof(packet));
-	
-	ReceiveBase = 0;
 
 	while(seq_num!=-1){//while ho pachetti da ricevere
 		WindowEnd = ReceiveBase + WIN_SIZE-1;
