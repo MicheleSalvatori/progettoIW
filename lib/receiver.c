@@ -21,10 +21,12 @@ int *check_pkt;
 int base, max, window;
 int ReceiveBase;
 int WindowEnd;
+int seq_num;
+int new_write;
+int expected_seq_num;
 int sock;
-int seq_num = 0;
-int new_write = 0;
-int expected_seq_num = 0;
+
+
 packet pkt_aux;
 packet *pkt;
 socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -34,7 +36,7 @@ void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int f
 void alarm_routine();
 void checkSegment( struct sockaddr_in *, int socket);
 
-void recv_reset(){ // Per trasferire un nuovo file senza disconnessione
+void initialize_recv(){ // Per trasferire un nuovo file senza disconnessione
 	ReceiveBase = 0;
 	WindowEnd = 0;
 	seq_num = 0;
@@ -49,7 +51,7 @@ void inputs_wait(char *s){
 }
 
 int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, int fd){
-	recv_reset();
+	initialize_recv();
 	sock = socket;
 	socklen_t addr_len=sizeof(struct sockaddr_in);
 	client_addr = sender_addr;
@@ -123,7 +125,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 
 		// SETTAGGIO TIMER
 		it_val.it_value.tv_sec = 0;
-    	it_val.it_value.tv_usec = 200000;
+    	it_val.it_value.tv_usec = 100000;
     	it_val.it_interval.tv_sec = 0;
 	    it_val.it_interval.tv_usec = 0;
 		if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
