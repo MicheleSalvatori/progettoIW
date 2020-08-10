@@ -1,5 +1,4 @@
 #include <sys/time.h>
-
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -8,8 +7,9 @@
 #include <dirent.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <stdbool.h>
 
-
+// Imposta il timer del ricevente per l'invio di ack cumulativi
 void set_timer(int time){
     struct itimerval it_val;
     
@@ -24,9 +24,19 @@ void set_timer(int time){
 		printf("Timer avviato\n");
 }
 
-
+// Utilizzata per il debug e l'analisi dei pacchetti inviati
 void inputs_wait(char *s){
 	char c;
 	printf("%s\n", s);
 	while (c = getchar() != '\n');
+}
+
+// Genera un numero casuale e ritorna true o false in base alla probabilita di perdita passata in input
+bool is_packet_lost(int prob){
+  int random = rand() %100;
+  printf ("Random Number: %d\n",random);
+  if (random<=prob){
+	  return true;
+  }
+  return false;
 }
