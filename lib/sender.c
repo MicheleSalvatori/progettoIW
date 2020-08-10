@@ -23,9 +23,13 @@ struct thread_args
 	int socket;
 };
 
-#define WIN_SIZE 32 			//Dimensione della finestra di trasmissione;
+#define WIN_SIZE 5 			//Dimensione della finestra di trasmissione;
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
 //#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
+
+/* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono
+
+*/
 
 int SendBase;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
 int NextSeqNum;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
@@ -49,32 +53,38 @@ void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
 
 void *receive_ack(void *arg){
-	printf ("______ THREAD CREATED ______\n");
 	struct thread_args *args = arg;
 	socklen_t addr_len = args->addr_len;
 	struct sockaddr_in *client_addr = args->client_addr;
 	int socket = args->socket;
 
-	int duplicate_ack_count = 0;
+	int duplicate_ack_count = 1;
 
 	while(fileTransfer){
-		printf ("______ THREAD In attesa di ACK ______\nFileTransfer = %d\n",fileTransfer);
 		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)client_addr, &addr_len) < 0){
 			perror ("Errore ricezione ack");
+			exit(-1);
 		}
+		printf ("THREAD: Ricevuto ACK | DuplicateAckCount = %d\n",duplicate_ack_count);
 		if (ack_num+1>SendBase){
 			printf("Ricevuto ACK num: %d\n\n",ack_num);
 			SendBase = ack_num+1;
 			tot_acked = ack_num;
-			duplicate_ack_count = 0;
+			duplicate_ack_count = 1;
 			if (tot_acked == tot_pkts-1){
 				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
 			}
 		}
 		else {
+			printf ("Ricevuto ACK duplicato: %d\n",ack_num);
 			duplicate_ack_count++;
 			if (duplicate_ack_count == 3){
-				sendto(socket, pkt+ack_num, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len);
+				printf ("\n\n !!! TRE ACK DUPLICATI !!! | ACK: %d\n\n",ack_num);
+				printf ("FAST RETRANSMISSION PKT: %d\n",(pkt+ack_num+1)->seq_num);
+				if (sendto(socket, pkt+ack_num+1, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+					perror("Errore ritrasmissione pkt");
+				};
+				duplicate_ack_count = 1;
 			}
 		}
 	}
@@ -137,6 +147,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
+		input_wait("CONTINUE");
 		if (SendBase+WIN_SIZE-1 >= tot_pkts && tot_pkts >= WIN_SIZE){		// DA CAMBIARE
 			SendBase = tot_pkts-(WIN_SIZE-1);	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
 		}

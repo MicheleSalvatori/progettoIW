@@ -97,7 +97,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	
 	// SIMULAZIONE PKT PERSO/CORROTTO
 	if (is_packet_lost(LOST_PROB)){
-		printf ("Pacchetto perso: %d\n",pkt_aux.seq_num);
+		printf ("\n!!! DEBUG: PACCHETTO PERSO (1) !!! | PKT: %d\n",pkt_aux.seq_num);
 		return;
 	}
 	
@@ -108,7 +108,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	}
 
 	// PRINT RIEPILOGO
-	printf ("Ricevuto:%d | Atteso:%d | LastAcked:%d\n", seq_num, expected_seq_num, lastAcked);
+	printf ("\nRicevuto:%d | Atteso:%d | LastAcked:%d\n", seq_num, expected_seq_num, lastAcked);
 
 	if (seq_num > expected_seq_num){
 		send_cumulative_ack(lastAcked);
@@ -129,7 +129,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 		// Per ogni pacchetto ordinato correttamente ricevuto riparte il timer di 500ms
 		while(recvfrom(socket, &new_pkt, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len)){
 			if (is_packet_lost(LOST_PROB)){
-				printf ("WHILE: pacchetto perso: %d\n",new_pkt.seq_num);
+				printf ("\n!!! DEBUG: PACCHETTO PERSO (2) !!! | PKT: %d\n",new_pkt.seq_num);
 				set_timer(100000);
 				break;
 			}			
@@ -140,7 +140,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				return;
 			}
 
-			printf ("Ricevuto:%d | Atteso:%d | LastAcked:%d\n", seq_num, expected_seq_num, lastAcked);
+			printf ("Ricevuto:%d | Atteso:%d | LastAcked:%d\n", new_pkt.seq_num, expected_seq_num, lastAcked);
 			if (new_pkt.seq_num == expected_seq_num){
 				seq_num = new_pkt.seq_num;
 
@@ -165,14 +165,14 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 
 // INVIO ACK CUMULATIVO
 void send_cumulative_ack(int ack_number){			
-	printf ("==========INVIO ACK CUMULATIVO===========\n");
+	printf ("\n==========INVIO ACK CUMULATIVO===========\n");
 	if(sendto(sock, &ack_number, sizeof(int), 0, (struct sockaddr *)client_addr, addr_len) < 0) {
 		perror("Error send ack\n");
 		return;
 		}
 	else{ 
 		printf("Ack inviato: %d\n", ack_number);
-		printf("============================\n");
+		printf("======================================\n");
 	}
 }
 
