@@ -34,6 +34,9 @@ int tot_acked;
 int tot_pkts;
 bool fileTransfer = true;
 
+int *check_pkt;
+packet *pkt;
+
 void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	SendBase = 0;
 	NextSeqNum = 0;
@@ -52,17 +55,26 @@ void *receive_ack(void *arg){
 	struct sockaddr_in *client_addr = args->client_addr;
 	int socket = args->socket;
 
+	int duplicate_ack_count = 0;
+
 	while(fileTransfer){
 		printf ("______ THREAD In attesa di ACK ______\nFileTransfer = %d\n",fileTransfer);
 		if (recvfrom(socket, &ack_num, sizeof(int), 0, (struct sockaddr *)client_addr, &addr_len) < 0){
 			perror ("Errore ricezione ack");
 		}
-		else {
+		if (ack_num+1>SendBase){
 			printf("Ricevuto ACK num: %d\n\n",ack_num);
 			SendBase = ack_num+1;
 			tot_acked = ack_num;
+			duplicate_ack_count = 0;
 			if (tot_acked == tot_pkts-1){
-				fileTransfer = false;
+				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
+			}
+		}
+		else {
+			duplicate_ack_count++;
+			if (duplicate_ack_count == 3){
+				sendto(socket, pkt+ack_num, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len);
 			}
 		}
 	}
@@ -73,11 +85,6 @@ void input_wait(char *s){
 	printf("%s\n", s);
 	while (c = getchar() != '\n');
 }
-
-int *check_pkt;
-int num_packet_sent;
-int base, max, window;	
-packet *pkt;
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
 	initialize_send();
@@ -127,9 +134,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 		}
 	}
 
-	//inizio trasmissione
-    num_packet_sent = 0;
-
+	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
 		if (SendBase+WIN_SIZE-1 >= tot_pkts && tot_pkts >= WIN_SIZE){		// DA CAMBIARE
@@ -188,7 +193,6 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 				}
 				else {
 					printf("Inviato PKT num : %d\n", pkt[i].seq_num);
-					num_packet_sent++;
 					if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
 						NextSeqNum++;
 					}
