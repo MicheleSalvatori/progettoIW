@@ -97,7 +97,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	
 	// SIMULAZIONE PKT PERSO/CORROTTO
 	if (is_packet_lost(LOST_PROB)){
-		// printf ("\n!!! DEBUG: PACCHETTO PERSO (1) !!! | PKT: %d\n",pkt_aux.seq_num);
+		printf ("\n!!! DEBUG: PACCHETTO PERSO (1) !!! | PKT: %d\n",pkt_aux.seq_num);
 		return;
 	}
 	
@@ -129,7 +129,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 		// Per ogni pacchetto ordinato correttamente ricevuto riparte il timer di 500ms
 		while(recvfrom(socket, &new_pkt, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len)){
 			if (is_packet_lost(LOST_PROB)){
-			//	printf ("\n!!! DEBUG: PACCHETTO PERSO (2) !!! | PKT: %d\n",new_pkt.seq_num);
+				printf ("\n!!! DEBUG: PACCHETTO PERSO (2) !!! | PKT: %d\n",new_pkt.seq_num);
 				break;
 			}			
 			if(new_pkt.seq_num ==-1) {
@@ -157,7 +157,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				set_timer(0);
 				send_cumulative_ack(lastAcked);
 				break;
-			}																				// Questi else forse si possono raggruppare
+			}								// Questi else forse si possono raggruppare
 			else {							//Arrivi di pkt fuori finestra
 				send_cumulative_ack(lastAcked);
 				break;
