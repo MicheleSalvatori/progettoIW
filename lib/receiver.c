@@ -107,7 +107,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	}
 
 	// PRINT RIEPILOGO
-	printf ("\nRicevuto:%d | Atteso:%d ", seq_num, expected_seq_num);
+	printf ("\nRicevuto:%d | Atteso:%d | RecvBase:%d", seq_num, expected_seq_num,ReceiveBase);
 
 	if (seq_num > expected_seq_num){
 		printf("\nPacchetto perso: %d",expected_seq_num);
@@ -119,6 +119,9 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 	if (seq_num == expected_seq_num){
 		new_write++; 					
 		expected_seq_num++;
+		int oldBase = ReceiveBase; //SOLO PER DEBUG
+		ReceiveBase = new_write;
+		printf ("\nIncrementato RecvBase | %d -> %d\n",oldBase,ReceiveBase);
 
 		memset(pkt+seq_num, 0, sizeof(packet));
 		pkt[pkt_aux.seq_num] = pkt_aux;
@@ -137,7 +140,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				return;
 			}
 
-			printf ("\nRicevuto:%d | Atteso:%d ", new_pkt.seq_num, expected_seq_num);
+			printf ("\nRicevuto:%d | Atteso:%d | RecvBase:%d", new_pkt.seq_num, expected_seq_num,ReceiveBase);
 			if (new_pkt.seq_num == expected_seq_num){
 				seq_num = new_pkt.seq_num;
 				printf(" E'il pacchetto atteso nei 500ms -> stop timer");
@@ -146,6 +149,9 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				lastAcked = seq_num;
 				expected_seq_num = seq_num+1;
 				new_write++;
+				int oldBase = ReceiveBase; //SOLO PER DEBUG
+				ReceiveBase = new_write;
+				printf ("\nIncrementato RecvBase | %d -> %d\n",oldBase,ReceiveBase);
 				set_timer(0);
 				send_cumulative_ack(expected_seq_num);
 				break;
@@ -179,7 +185,7 @@ void send_cumulative_ack(int ack_number){
 	}
 }
 
-void alarm_routine(packet new_pkt,struct sockaddr_in *client_addr,socklen_t addr_len){
+void alarm_routine(){
 	printf("\nTimer Scaduto, nessun pacchetto da inviare trovato.");
 	send_cumulative_ack(expected_seq_num);
 	return;

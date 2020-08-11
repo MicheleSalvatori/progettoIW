@@ -23,9 +23,7 @@ struct thread_args
 	int socket;
 };
 
-#define WIN_SIZE 5 			//Dimensione della finestra di trasmissione;
-//#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
-//#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
+#define WIN_SIZE 15 			//Dimensione della finestra di trasmissione;
 
 /* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
@@ -33,13 +31,69 @@ struct thread_args
 
 int SendBase;		// Base della finestra di trasmissione: più piccolo numero di sequenza dei segmenti trasmessi ma di cui non si è ancora ricevuto ACK
 int NextSeqNum;		// Sequence Number del prossimo pkt da inviare, quindi primo pacchetto nella finestra ma non in volo
+int WindowEnd;
 int ack_num;
 int tot_acked;
 int tot_pkts;
 bool fileTransfer = true;
+bool isTimerStarted = false;
+struct itimerval it_val;
+socklen_t addr_len;
+struct sockaddr_in *client_addr;
+
+int sock;
 
 int *check_pkt;
 packet *pkt;
+
+void timeout_routine();
+
+void set_timer_send(int sec,int micro){
+    struct itimerval it_val;
+    
+        it_val.it_value.tv_sec = sec;
+    	it_val.it_value.tv_usec = micro;
+    	it_val.it_interval.tv_sec = 0;
+	    it_val.it_interval.tv_usec = 0;
+		if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
+  			perror("setitimer");
+			exit(1);
+			}
+		// printf("Timer avviato\n");
+}
+
+void fast_retrasmission(int rtx_seq){
+	if (sendto(sock, pkt+rtx_seq, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+		perror("Errore ritrasmissione pkt");
+	}else{
+		printf("FAST RETRANSMIT -> PKT: %d\n", (pkt+rtx_seq)->seq_num);
+	}
+}
+
+void print_send_status(){							//STAMPA LO STATO DI INVIO DEI PKT PER IL DEBUG
+	for (int j = SendBase-1;j<SendBase+20;j++){
+		if (j == tot_pkts){
+			break;
+		}
+		char *status;
+		if (check_pkt[j] == 0){
+			status = "Da Inviare";
+		}
+		else if (check_pkt[j] == 1){
+			status = "Inviato non Acked";
+		}
+		else if (check_pkt[j] == 2){
+			status = "Già Acked";
+		}
+		printf ("Stato PKT %d | %s\n",j+1,status);
+	}
+}
+
+void cumulative_ack(int received_ack){
+	for (int k = 0; k<received_ack-1; k++){
+		check_pkt[k] = 2;
+	}	
+}
 
 void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	SendBase = 1;
@@ -65,13 +119,17 @@ void *receive_ack(void *arg){
 			perror ("Errore ricezione ack");
 			exit(-1);
 		}
-		if (ack_num+1>SendBase){
+		if (ack_num>SendBase){
 			printf("Ricevuto ACK NUM: %d | DuplicateAckCount: %d\n",ack_num, duplicate_ack_count);
-			printf ("\nIncrementato SendBase | %d -> %d\n",SendBase,ack_num+1);
-			SendBase = ack_num+1;
-			tot_acked = ack_num;
+			printf ("\nIncrementato SendBase | %d -> %d\n",SendBase,ack_num);
+			SendBase = ack_num;
+			tot_acked = ack_num-1;
 			duplicate_ack_count = 1;
-			check_pkt[ack_num-1] = 2;
+			cumulative_ack(ack_num);
+			if (WindowEnd - SendBase >0){
+				set_timer_send(0,500000);
+				isTimerStarted = true;
+			}
 			if (tot_acked == tot_pkts){
 				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
 			}
@@ -81,11 +139,7 @@ void *receive_ack(void *arg){
 			duplicate_ack_count++;
 			if (duplicate_ack_count == 3){
 				printf ("\n\n !!! TRE ACK DUPLICATI !!! | ACK: %d\n\n",ack_num);
-				if (sendto(socket, pkt+ack_num, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
-					perror("Errore ritrasmissione pkt");
-				}else{
-					printf("FAST RETRANSMIT -> PKT: %d\n", (pkt+ack_num)->seq_num);
-				}
+				fast_retrasmission(ack_num-1);
 				duplicate_ack_count = 1;
 			}
 		}
@@ -99,9 +153,11 @@ void input_wait(char *s){
 }
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
+	sock = socket;
 	initialize_send();
 	printf ("SENDER SEND BASE: %d\n",SendBase);
-	socklen_t addr_len = sizeof(struct sockaddr_in);
+	client_addr = receiver_addr;
+	addr_len = sizeof(struct sockaddr_in);
 	char *buff = calloc(PKT_SIZE, sizeof(char));
 	int i, new_read;
 	off_t file_dim;
@@ -148,7 +204,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
-		printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
+		//printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
 		input_wait("CONTINUE");
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
@@ -173,6 +229,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
               else {
                 printf ("File closed\n");
               }
+			set_timer_send(0,500000);
 			return;
 		}
 	}
@@ -180,12 +237,12 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 
 //Invia tutti i pacchetti nella finestra
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
-	int cycle_end;
-	cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+	WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+	signal(SIGALRM, timeout_routine);
 
 	printf("\n====== INIZIO SEND WINDOW ======\n\n");
 	printf ("SendBase : %d\n",SendBase);
-	printf ("WindowEnd: %d\n",cycle_end);
+	printf ("WindowEnd: %d\n",WindowEnd);
 	printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
@@ -194,20 +251,13 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	printf("%d<%d\n",NextSeqNum, SendBase+WIN_SIZE-1);
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 		
-	for(i=NextSeqNum-1; i<cycle_end; i++){					// ho messo -1 non so perchè
-		cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
-		char *status;
-		if (check_pkt[i] == 0){
-			status = "Da Inviare";
-		}
-		else if (check_pkt[i] == 1){
-			status = "Inviato non Acked";
-		}
-		else if (check_pkt[i] == 2){
-			status = "Già Acked";
-		}
-		printf ("CHECK PKT [%d] | %s\n",i+1,status);
+	for(i=NextSeqNum-1; i<WindowEnd; i++){					// ho messo -1 non so perchè
+		WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
 		if(check_pkt[i]==0){
+			if (isTimerStarted){
+				set_timer_send(0,500000);
+				isTimerStarted = true;
+			}
 			if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 				perror ("PACKET LOST (1)");
 			}
@@ -221,5 +271,14 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 			}
 		}
 	}
+	print_send_status();
 	printf("\n====== FINE SEND WINDOW ======\n\n");
+}
+
+void timeout_routine(){
+	printf("\nTimer Scaduto, PKT perso\n");
+	fast_retrasmission(SendBase-1);
+	set_timer_send(0,500000);
+	isTimerStarted = true;
+	return;
 }
