@@ -27,7 +27,7 @@ struct thread_args
 //#define MAX_TIMEOUT 800000 	//Valore in ms del timeout massimo
 //#define MIN_TIMEOUT 800		//Valore in ms del timeout minimo
 
-/* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono
+/* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
 */
 
@@ -65,13 +65,14 @@ void *receive_ack(void *arg){
 			perror ("Errore ricezione ack");
 			exit(-1);
 		}
-		// printf ("THREAD: Ricevuto ACK | DuplicateAckCount = %d\n",duplicate_ack_count);
 		if (ack_num+1>SendBase){
-			printf("Ricevuto ACK num: %d\nDuplicateAckCount: %d\n",ack_num, duplicate_ack_count);
+			printf("Ricevuto ACK NUM: %d | DuplicateAckCount: %d\n",ack_num, duplicate_ack_count);
+			printf ("\nIncrementato SendBase | %d -> %d\n",SendBase,ack_num+1);
 			SendBase = ack_num+1;
 			tot_acked = ack_num;
 			duplicate_ack_count = 1;
-			if (tot_acked == tot_pkts-1){
+			check_pkt[ack_num-1] = 2;
+			if (tot_acked == tot_pkts){
 				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
 			}
 		}
@@ -83,7 +84,7 @@ void *receive_ack(void *arg){
 				if (sendto(socket, pkt+ack_num, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 					perror("Errore ritrasmissione pkt");
 				}else{
-					printf("FAST RETRANSMIT -> pkt: %d\n", (pkt+ack_num)->seq_num);
+					printf("FAST RETRANSMIT -> PKT: %d\n", (pkt+ack_num)->seq_num);
 				}
 				duplicate_ack_count = 1;
 			}
@@ -149,9 +150,6 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
 		printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
 		input_wait("CONTINUE");
-		if (SendBase+WIN_SIZE-1 >= tot_pkts && tot_pkts >= WIN_SIZE){		// DA CAMBIARE
-			SendBase = tot_pkts-(WIN_SIZE-1);	//Tolto tot_pkts-1 perche non funge con invio di un file con 1 solo pkt (funziona anche con video.mp4 daje)
-		}
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
 	
@@ -195,27 +193,33 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	//input_wait("enter");
 	printf("%d<%d\n",NextSeqNum, SendBase+WIN_SIZE-1);
 	// Caso in cui la finestra non è ancora piena di pkt in volo
-	if(NextSeqNum<SendBase+WIN_SIZE-1){
 		
-		for(i=NextSeqNum-1; i<cycle_end; i++){					// ho messo -1 non so perchè
-			cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
-			if(check_pkt[i]==0){
-				if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
-					perror ("PACKET LOST (1)");
+	for(i=NextSeqNum-1; i<cycle_end; i++){					// ho messo -1 non so perchè
+		cycle_end = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+		char *status;
+		if (check_pkt[i] == 0){
+			status = "Da Inviare";
+		}
+		else if (check_pkt[i] == 1){
+			status = "Inviato non Acked";
+		}
+		else if (check_pkt[i] == 2){
+			status = "Già Acked";
+		}
+		printf ("CHECK PKT [%d] | %s\n",i+1,status);
+		if(check_pkt[i]==0){
+			if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
+				perror ("PACKET LOST (1)");
+			}
+			else {
+				printf("Inviato PKT num : %d\n", pkt[i].seq_num);
+				if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
+					printf ("\nIncrementato NextSeqNum | %d -> %d\n",NextSeqNum,NextSeqNum+1);
+					NextSeqNum++;
 				}
-				else {
-					printf("Inviato PKT num : %d\n", pkt[i].seq_num);
-					if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
-						NextSeqNum++;
-					}
-					// printf("NextSeqNum: %d\n",NextSeqNum);
-					check_pkt[i]=1;
-				}
+				check_pkt[i]=1;
 			}
 		}
 	}
 	printf("\n====== FINE SEND WINDOW ======\n\n");
-	// printf ("SendBase : %d\n",SendBase);
-	// printf ("WindowEnd: %d\n",SendBase+WIN_SIZE-1);
-	// printf("\n================================\n\n");
 }
