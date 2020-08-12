@@ -16,14 +16,14 @@
 
 #include "utility.c"
 
-#define WIN_SIZE 5
+#define WIN_SIZE 15
 
 int error_count;
 int *check_pkt;
 int base, max, window;
 int ReceiveBase, WindowEnd;
 int sock;
-int seq_num, new_write, expected_seq_num, lastAcked;
+int seq_num, new_write, expected_seq_num, lastAcked, endFilePacket;
 packet pkt_aux, *pkt;
 socklen_t addr_len = sizeof(struct sockaddr_in);
 struct sockaddr_in *client_addr;
@@ -40,6 +40,7 @@ void initialize_recv(){ // Per trasferire un nuovo file senza disconnessione
 	expected_seq_num = 1;
 	new_write = 0;
 	lastAcked = 0;
+	endFilePacket = 0;
 }
 
 
@@ -59,7 +60,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	check_pkt=calloc(6000, sizeof(packet));
 	memset(&pkt_aux, 0, sizeof(packet));
 
-	while(seq_num!=-1){							//while ho pachetti da ricevere
+	while(endFilePacket!=1 && expected_seq_num>){							//while ho pachetti da ricevere ( ci va un AND perche potrei aver ricevuto -1 ma mi mancano i precedenti)
 		WindowEnd = ReceiveBase + WIN_SIZE-1;
 
 		memset(&pkt_aux, 0, sizeof(packet));
@@ -68,10 +69,18 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 			perror("error receive pkt ");
 			continue;
 		}
-		
 		seq_num = pkt_aux.seq_num;
-		checkSegment(sender_addr, socket);
+		endFilePacket = pkt_aux.eof;
+		printf ("PKT: %d | EOF: %d\n",seq_num,endFilePacket);
+
+		if (endFilePacket == 1){ //Se il primo pacchetto è l'unico da ricevere
+			pkt[seq_num-1] = pkt_aux;
+			new_write++;
+			send_cumulative_ack(seq_num+1);
+			break;
 		}
+		checkSegment(sender_addr, socket);
+	}
 	
 	//SCRITTURA
 	printf("====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", new_write);
@@ -97,12 +106,6 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 		printf ("\n!!! DEBUG: PACCHETTO PERSO (1) !!! | PKT: %d\n",pkt_aux.seq_num);
 		return;
 	}
-	
-	//PKT FINE FILE
-	if(seq_num ==-1) {
-		printf("PKT FINE FILE RICEVUTO\n");
-		return;
-	}
 
 	// PRINT RIEPILOGO
 	printf ("\nRicevuto:%d | Atteso:%d | RecvBase:%d", seq_num, expected_seq_num,ReceiveBase);
@@ -122,7 +125,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 		printf ("\nIncrementato RecvBase | %d -> %d\n",oldBase,ReceiveBase);
 
 		memset(pkt+seq_num, 0, sizeof(packet));
-		pkt[pkt_aux.seq_num] = pkt_aux;
+		pkt[pkt_aux.seq_num-1] = pkt_aux; //-1 perche pkt[k] ha seq number k+1
 		lastAcked = seq_num;
 		set_timer(100000);			// AVVIO TIMER
 
@@ -132,10 +135,13 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				printf ("\n!!! DEBUG: PACCHETTO PERSO (2) !!! | PKT: %d\n",new_pkt.seq_num);
 				break;
 			}			
-			if(new_pkt.seq_num ==-1) {
-				seq_num = -1;
+			if(new_pkt.eof == 1) {
+				printf ("EOF\n");
+				pkt[seq_num-1] = new_pkt;
+				new_write++;
+				endFilePacket = 1;
 				set_timer(0);		// STOPPO IL TIMER -> DOWNLOAD TERMINATO
-				return;
+				break;
 			}
 
 			printf ("\nRicevuto:%d | Atteso:%d | RecvBase:%d", new_pkt.seq_num, expected_seq_num,ReceiveBase);
@@ -143,7 +149,7 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				seq_num = new_pkt.seq_num;
 				printf(" E'il pacchetto atteso nei 500ms -> stop timer");
 				memset(pkt+seq_num, 0, sizeof(packet));
-				pkt[seq_num] = new_pkt;
+				pkt[seq_num-1] = new_pkt;
 				lastAcked = seq_num;
 				expected_seq_num = seq_num+1;
 				new_write++;
@@ -154,10 +160,10 @@ void checkSegment(struct sockaddr_in *client_addr, int socket){
 				send_cumulative_ack(expected_seq_num);
 				break;
 			}
-			if (new_pkt.seq_num > expected_seq_num){	// Arrivo di pkt con buco -> VIENE BUFFERIZZATO LO STESSO
+			if (WindowEnd > new_pkt.seq_num > expected_seq_num){	// Arrivo di pkt con buco -> VIENE BUFFERIZZATO LO STESSO
 				printf("\nPerso pkt: %d", expected_seq_num);
 				memset(pkt+new_pkt.seq_num, 0, sizeof(packet));
-				pkt[new_pkt.seq_num] = new_pkt;
+				pkt[new_pkt.seq_num-1] = new_pkt;
 				new_write++;
 				set_timer(0);
 				send_cumulative_ack(expected_seq_num);

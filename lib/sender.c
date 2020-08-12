@@ -24,7 +24,7 @@ struct thread_args
 };
 
 #define WIN_SIZE 15 			//Dimensione della finestra di trasmissione;
-#define TO_MICRO 900000
+#define TO_MICRO 200000
 
 /* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
@@ -39,8 +39,10 @@ int tot_pkts;
 bool fileTransfer = true;
 bool isTimerStarted = false;
 struct itimerval it_val;
+struct timeval end, start;
 socklen_t addr_len;
 struct sockaddr_in *client_addr;
+off_t file_dim;
 
 int sock;
 
@@ -48,6 +50,19 @@ int *check_pkt;
 packet *pkt;
 
 void timeout_routine();
+void set_timer_send(int sec,int micro);
+void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
+
+void end_transmission(){
+	printf("====== Transmission end =======\n");
+	set_timer_send(0,0); //stop timer
+	printf("File transfer finished\n");
+	gettimeofday(&end, NULL);
+	double tm=end.tv_sec-start.tv_sec+(double)(end.tv_usec-start.tv_usec)/1000000;
+	double tp=file_dim/tm;
+	printf("Transfer time: %f sec [%f KB/s]\n", tm, tp/1024);
+	printf("===========================\n");
+}
 
 void set_timer_send(int sec,int micro){
     struct itimerval it_val;
@@ -105,8 +120,6 @@ void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	fileTransfer = true;
 }
 
-void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
-
 void *receive_ack(void *arg){
 	struct thread_args *args = arg;
 	socklen_t addr_len = args->addr_len;
@@ -133,6 +146,7 @@ void *receive_ack(void *arg){
 			}
 			if (tot_acked == tot_pkts){
 				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
+				end_transmission();
 			}
 		}
 		else {
@@ -161,7 +175,6 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	addr_len = sizeof(struct sockaddr_in);
 	char *buff = calloc(PKT_SIZE, sizeof(char));
 	int i, new_read;
-	off_t file_dim;
 
 	struct thread_args t_args;
 	t_args.addr_len = addr_len;
@@ -191,24 +204,27 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	printf ("Numero Pacchetti: %d\n",tot_pkts);
 	lseek(fd, 0, SEEK_SET);
 
-	struct timeval end, start;
 	gettimeofday(&start, NULL);
 
-	// Assegno i seq num ai pkt
+	// ASSEGNAZIONE DEI NUMERI DI SEQUENZA AI PACCHETTI
 	for(i=0; i<tot_pkts; i++){
+		printf ("Assegnato numero di sequenza | pkt[%d] -> %d\n",i,i+1);
 		pkt[i].seq_num = i+1;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
 		}
 	}
+	pkt[tot_pkts-1].eof=1; //Segna l'ultimo pacchetto come quello di fine file
+	printf ("Assegnato EOF | SEQ: %d -> %d\n",pkt[tot_pkts-1].seq_num,pkt[tot_pkts-1].eof);
+	input_wait("INIZIA TRASMISSIONE");
 
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
 	
-	//fine trasmissione
+	/*//fine trasmissione
 	for(i=0; i<MAX_ERR; i++){ //Perche i<MAX_ERR? non ci serve
 		printf("====== Transmission end =======\n");
 		set_timer_send(0,0); //stop timer
@@ -231,7 +247,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
               }
 			return;
 		}
-	}
+	} */
 }
 
 //Invia tutti i pacchetti nella finestra
@@ -260,7 +276,7 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 				perror ("PACKET LOST (1)");
 			}
 			else {
-				printf("Inviato PKT num : %d\n", pkt[i].seq_num);
+				printf("Inviato PKT num: %d | EOF: %d\n", pkt[i].seq_num,pkt[i].eof);
 				NextSeqNum++;
 				check_pkt[i]=1;
 			}

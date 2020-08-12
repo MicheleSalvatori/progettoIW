@@ -190,10 +190,7 @@ int main(int argc, char **argv){
 
 							read(fd, (void *)&buffToSend, strlen(buffToSend));
               sender(server_sock, &client_address, FLYING, LOST_PROB, fd);
-
-              /*if(sendto(server_sock, buff, strlen(buff), 0, (struct sockaddr *)&client_address, addr_len) < 0){
-                printf("Errore invio messaggio\n");
-              }*/
+              close(fd);
 							remove("file_list.txt");
 							break;
 

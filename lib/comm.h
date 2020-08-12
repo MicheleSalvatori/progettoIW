@@ -52,5 +52,6 @@ char i;
 typedef struct packet{
 	int seq_num;
 	short int pkt_dim;
-	char data[PKT_SIZE-sizeof(int)-sizeof(short int)]; //Riservo spazio come dimensione del pacchetto - intero del seq number - intero della dim pacchetto
+	char data[PKT_SIZE-2*sizeof(int)-sizeof(short int)]; //Riservo spazio come dimensione del pacchetto - intero del seq number - intero della dim pacchetto
+	int eof;
 } packet;

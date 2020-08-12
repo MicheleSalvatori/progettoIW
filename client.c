@@ -126,7 +126,7 @@ menu:
 				remove(path);
 				exit(-1);
 			}
-			//set_timeout(client_sock, TIMEOUT_PKT);
+			
 			control=receiver(client_sock, &server_address, FLYING, LOST_PROB, fd);
 			if (control == -1) {
 				close(fd);
