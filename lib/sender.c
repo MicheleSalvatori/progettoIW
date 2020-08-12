@@ -24,6 +24,7 @@ struct thread_args
 };
 
 #define WIN_SIZE 15 			//Dimensione della finestra di trasmissione;
+#define TO_MICRO 900000
 
 /* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
@@ -120,14 +121,14 @@ void *receive_ack(void *arg){
 			exit(-1);
 		}
 		if (ack_num>SendBase){
-			printf("Ricevuto ACK NUM: %d | DuplicateAckCount: %d\n",ack_num, duplicate_ack_count);
-			printf ("\nIncrementato SendBase | %d -> %d\n",SendBase,ack_num);
+			printf ("Ricevuto ACK numero: %d\n",ack_num);
+			printf ("Incrementato SendBase | %d -> %d\n\n",SendBase,ack_num);
 			SendBase = ack_num;
 			tot_acked = ack_num-1;
 			duplicate_ack_count = 1;
 			cumulative_ack(ack_num);
 			if (WindowEnd - SendBase >0){
-				set_timer_send(0,500000);
+				set_timer_send(0,TO_MICRO);
 				isTimerStarted = true;
 			}
 			if (tot_acked == tot_pkts){
@@ -203,15 +204,14 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	}
 
 	//INIZIO TRASMISSIONE PACCHETTI
-	while(fileTransfer){ //while ho pachetti da inviare e non ho MAX_ERR ricezioni consecutive fallite
-		//printf ("Ciclo While\nACKED: %d\nPKTS: %d\n\n",tot_acked,tot_pkts);
-		input_wait("CONTINUE");
+	while(fileTransfer){ //while ho pachetti da inviare
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
 	
 	//fine trasmissione
 	for(i=0; i<MAX_ERR; i++){ //Perche i<MAX_ERR? non ci serve
 		printf("====== Transmission end =======\n");
+		set_timer_send(0,0); //stop timer
 		memset(buff, 0, PKT_SIZE);
 		((packet*)buff)->seq_num=-1;
 		if(sendto(socket, buff, sizeof(int), 0, (struct sockaddr *)receiver_addr, addr_len) > 0) {
@@ -229,7 +229,6 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
               else {
                 printf ("File closed\n");
               }
-			set_timer_send(0,500000);
 			return;
 		}
 	}
@@ -240,22 +239,21 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
 	signal(SIGALRM, timeout_routine);
 
-	printf("\n====== INIZIO SEND WINDOW ======\n\n");
-	printf ("SendBase : %d\n",SendBase);
-	printf ("WindowEnd: %d\n",WindowEnd);
-	printf("\n================================\n\n");
+	//printf("\n====== INIZIO SEND WINDOW ======\n\n");
+	//printf ("SendBase : %d\n",SendBase);
+	//printf ("WindowEnd: %d\n",WindowEnd);
+	//printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
-	
-	//input_wait("enter");
-	printf("%d<%d\n",NextSeqNum, SendBase+WIN_SIZE-1);
+
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 		
 	for(i=NextSeqNum-1; i<WindowEnd; i++){					// ho messo -1 non so perchè
 		WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+		//input_wait("!! CONTINUE !!\n");
 		if(check_pkt[i]==0){
-			if (isTimerStarted){
-				set_timer_send(0,500000);
+			if (!isTimerStarted){
+				set_timer_send(0,TO_MICRO);
 				isTimerStarted = true;
 			}
 			if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
@@ -263,22 +261,19 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 			}
 			else {
 				printf("Inviato PKT num : %d\n", pkt[i].seq_num);
-				if (NextSeqNum!=tot_pkts-1){ //Altrimenti chiedo pkt 263 se ne ho 262
-					printf ("\nIncrementato NextSeqNum | %d -> %d\n",NextSeqNum,NextSeqNum+1);
-					NextSeqNum++;
-				}
+				NextSeqNum++;
 				check_pkt[i]=1;
 			}
 		}
 	}
-	print_send_status();
-	printf("\n====== FINE SEND WINDOW ======\n\n");
+	//print_send_status();
+	//printf("\n====== FINE SEND WINDOW ======\n\n");
 }
 
 void timeout_routine(){
 	printf("\nTimer Scaduto, PKT perso\n");
 	fast_retrasmission(SendBase-1);
-	set_timer_send(0,500000);
+	set_timer_send(0,TO_MICRO);
 	isTimerStarted = true;
 	return;
 }

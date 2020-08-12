@@ -78,8 +78,6 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	for(i=0; i<new_write; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
 		printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);
-		// base=(base+1)%N;	//sposto la finestra di uno per ogni check==1 resettato
-		// max=(base+window-1)%N;
 	}
 	printf("============================\n");
 }
@@ -181,7 +179,7 @@ void send_cumulative_ack(int ack_number){
 		return;
 		}
 	else{ 
-		printf("\t->INVIO ACK: %d", ack_number);
+		printf("\t->INVIO ACK: %d\n", ack_number);
 	}
 }
 
