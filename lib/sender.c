@@ -210,44 +210,18 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	for(i=0; i<tot_pkts; i++){
 		printf ("Assegnato numero di sequenza | pkt[%d] -> %d\n",i,i+1);
 		pkt[i].seq_num = i+1;
-		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-sizeof(int)-sizeof(short int));
+		pkt[i].num_pkts = tot_pkts;
+		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-2*sizeof(int)-sizeof(short int));
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
 		}
 	}
-	pkt[tot_pkts-1].eof=1; //Segna l'ultimo pacchetto come quello di fine file
-	printf ("Assegnato EOF | SEQ: %d -> %d\n",pkt[tot_pkts-1].seq_num,pkt[tot_pkts-1].eof);
 	input_wait("INIZIA TRASMISSIONE");
 
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
-	
-	/*//fine trasmissione
-	for(i=0; i<MAX_ERR; i++){ //Perche i<MAX_ERR? non ci serve
-		printf("====== Transmission end =======\n");
-		set_timer_send(0,0); //stop timer
-		memset(buff, 0, PKT_SIZE);
-		((packet*)buff)->seq_num=-1;
-		if(sendto(socket, buff, sizeof(int), 0, (struct sockaddr *)receiver_addr, addr_len) > 0) {
-			printf("File transfer finished\n");
-			gettimeofday(&end, NULL);
-			double tm=end.tv_sec-start.tv_sec+(double)(end.tv_usec-start.tv_usec)/1000000;
-			double tp=file_dim/tm;
-			printf("Transfer time: %f sec [%f KB/s]\n", tm, tp/1024);
-			printf("===========================\n");
-			tot_pkts = 0;
-			if (close(fd)<0){
-                printf ("File closing error with fd = %d\n",fd);
-                perror("error (2)");
-              }
-              else {
-                printf ("File closed\n");
-              }
-			return;
-		}
-	} */
 }
 
 //Invia tutti i pacchetti nella finestra
