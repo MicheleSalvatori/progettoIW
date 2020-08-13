@@ -193,11 +193,12 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	
 	//calcolo tot_pkts
 	file_dim = lseek(fd, 0, SEEK_END);
-	if(file_dim%(PKT_SIZE-2*sizeof(int)-sizeof(short int))==0){
-		tot_pkts = file_dim/(PKT_SIZE-2*sizeof(int)-sizeof(short int));
+	int pkt_data_size = PKT_SIZE-2*sizeof(int)-sizeof(short int);
+	if(file_dim%pkt_data_size==0){
+		tot_pkts = file_dim/pkt_data_size;
 	}
 	else{
-		tot_pkts = file_dim/(PKT_SIZE-2*sizeof(int)-sizeof(short int))+1;
+		tot_pkts = (file_dim/pkt_data_size)+1;
 	}
 	printf("\n====== INIZIO DEL SENDER | PKTS: %d ======\n\n",tot_pkts);
 
@@ -211,7 +212,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	for(i=0; i<tot_pkts; i++){
 		pkt[i].seq_num = i+1;
 		pkt[i].num_pkts = tot_pkts;
-		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-2*sizeof(int)-sizeof(short int));
+		pkt[i].pkt_dim=read(fd, pkt[i].data, pkt_data_size);
 		printf ("%d | %d\n",i,pkt[i].pkt_dim);
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
