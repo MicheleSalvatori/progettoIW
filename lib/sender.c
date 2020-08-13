@@ -86,22 +86,26 @@ void fast_retrasmission(int rtx_seq){
 	}
 }
 
-void print_send_status(){							//STAMPA LO STATO DI INVIO DEI PKT PER IL DEBUG
-	for (int j = SendBase-1;j<SendBase+20;j++){
+void print_packet_status (int seq){
+	char *status;
+	if (check_pkt[seq-1] == 0){
+		status = "Da Inviare";
+	}
+	else if (check_pkt[seq-1] == 1){
+		status = "Inviato non Acked";
+	}
+	else if (check_pkt[seq-1] == 2){
+		status = "Già Acked";
+	}
+	printf ("Stato PKT %d | %s\n",seq,status);
+}
+
+void print_window_status(){							//STAMPA LO STATO DI INVIO DEI PKT PER IL DEBUG
+	for (int j = SendBase;j<SendBase+20;j++){
 		if (j == tot_pkts){
 			break;
 		}
-		char *status;
-		if (check_pkt[j] == 0){
-			status = "Da Inviare";
-		}
-		else if (check_pkt[j] == 1){
-			status = "Inviato non Acked";
-		}
-		else if (check_pkt[j] == 2){
-			status = "Già Acked";
-		}
-		printf ("Stato PKT %d | %s\n",j+1,status);
+		print_packet_status (j);
 	}
 }
 
@@ -118,6 +122,7 @@ void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	tot_acked = 0;
 	tot_pkts = 0;	
 	fileTransfer = true;
+	isTimerStarted = false;
 }
 
 void *receive_ack(void *arg){
@@ -174,7 +179,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	client_addr = receiver_addr;
 	addr_len = sizeof(struct sockaddr_in);
 	char *buff = calloc(PKT_SIZE, sizeof(char));
-	int i, new_read;
+	int i;
 
 	struct thread_args t_args;
 	t_args.addr_len = addr_len;
@@ -188,30 +193,26 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	
 	//calcolo tot_pkts
 	file_dim = lseek(fd, 0, SEEK_END);
-	if(file_dim%(PKT_SIZE-sizeof(int)-sizeof(short int))==0){
-		printf ("Calcolo tot_pkts\n");
-		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int));
+	if(file_dim%(PKT_SIZE-2*sizeof(int)-sizeof(short int))==0){
+		tot_pkts = file_dim/(PKT_SIZE-2*sizeof(int)-sizeof(short int));
 	}
 	else{
-		printf ("Calcolo tot_pkts\n");
-		tot_pkts = file_dim/(PKT_SIZE-sizeof(int)-sizeof(short int))+1;
+		tot_pkts = file_dim/(PKT_SIZE-2*sizeof(int)-sizeof(short int))+1;
 	}
 	printf("\n====== INIZIO DEL SENDER | PKTS: %d ======\n\n",tot_pkts);
 
 	pkt=calloc(tot_pkts, sizeof(packet));
-	check_pkt=calloc(tot_pkts, sizeof(int));//0=da inviare, 1 inviato non ackato, 2 ackato. non serve che ruoti.		//MOMENTANEO
-
-	printf ("Numero Pacchetti: %d\n",tot_pkts);
+	check_pkt=calloc(tot_pkts, sizeof(int));
 	lseek(fd, 0, SEEK_SET);
 
 	gettimeofday(&start, NULL);
 
 	// ASSEGNAZIONE DEI NUMERI DI SEQUENZA AI PACCHETTI
 	for(i=0; i<tot_pkts; i++){
-		printf ("Assegnato numero di sequenza | pkt[%d] -> %d\n",i,i+1);
 		pkt[i].seq_num = i+1;
 		pkt[i].num_pkts = tot_pkts;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, PKT_SIZE-2*sizeof(int)-sizeof(short int));
+		printf ("%d | %d\n",i,pkt[i].pkt_dim);
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
 		}
@@ -241,6 +242,7 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 	for(i=NextSeqNum-1; i<WindowEnd; i++){					// ho messo -1 non so perchè
 		WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
 		//input_wait("!! CONTINUE !!\n");
+
 		if(check_pkt[i]==0){
 			if (!isTimerStarted){
 				set_timer_send(0,TO_MICRO);
@@ -250,7 +252,7 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 				perror ("PACKET LOST (1)");
 			}
 			else {
-				printf("Inviato PKT num: %d | EOF: %d\n", pkt[i].seq_num,pkt[i].eof);
+				printf("Inviato PKT num: %d\n", pkt[i].seq_num);
 				NextSeqNum++;
 				check_pkt[i]=1;
 			}

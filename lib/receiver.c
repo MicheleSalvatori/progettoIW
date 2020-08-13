@@ -124,7 +124,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 
 	//SCRITTURA FILE IN RICEZIONE
 	set_timer(0);
-	printf("====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", tot_pkts);
+	printf("\n\n====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", tot_pkts);
 	for(i=0; i<tot_pkts; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
 		printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);
