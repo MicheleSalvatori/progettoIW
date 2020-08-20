@@ -24,7 +24,6 @@ struct thread_args
 };
 
 #define WIN_SIZE 15 			//Dimensione della finestra di trasmissione;
-#define TO_MICRO 200000
 
 /* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
@@ -38,7 +37,6 @@ int tot_acked;
 int tot_pkts;
 bool fileTransfer = true;
 bool isTimerStarted = false;
-struct itimerval it_val;
 struct timeval transferEnd, transferStart;
 socklen_t addr_len;
 struct sockaddr_in *client_addr;
@@ -52,6 +50,12 @@ packet *pkt;
 void timeout_routine();
 void set_timer_send(int sec,int micro);
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
+
+void input_wait(char *s){
+	char c;
+	printf("%s\n", s);
+	while (c = getchar() != '\n');
+}
 
 uint64_t time_now()
 {
@@ -68,14 +72,9 @@ void time_stamp_sender(){						//METTERE UNO UNICO IN UTILITY (MIKY)
  	long microseconds;
 
 	gettimeofday(&tv,0);
-
 	ptm = localtime (&tv.tv_sec);
-	/* Format the date and time, down to a single second. */
-	strftime (time_string, sizeof (time_string), "%Y-%m-%d %H:%M:%S", ptm);
-	/* Compute milliseconds from microseconds. */
+	strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); //"%Y-%m-%d %H:%M:%S" full timestamp con data 
 	microseconds = tv.tv_usec;
-	/* Print the formatted time, in seconds, followed by a decimal point
-	and the milliseconds. */
 	printf ("[%s.%03ld] ", time_string, microseconds);
 }
 
@@ -86,28 +85,26 @@ void update_timeout(packet to_pkt)
 	uint64_t sentTime = to_pkt.sent_time;
 	int64_t old_to = timeoutInterval; //DEBUG
 	uint64_t sampleRTT = time_now() - sentTime;
+	if (sentTime == 0){
+		sampleRTT = 1000;
+	}
 	estimatedRTT = (1-ALPHA) * estimatedRTT + ALPHA * sampleRTT;
 	devRTT = (1-BETA)*devRTT + BETA * abs(sampleRTT - estimatedRTT);
 	timeoutInterval = (estimatedRTT + 4 * devRTT);
 	//timeoutInterval = timeoutInterval/5;
-	printf ("\n===== Timeout updated pkt %d | %ld -> %ld =====\n",to_pkt.seq_num,old_to,timeoutInterval);
-	//time_stamp_sender();
-	printf ("\nsentTime: %ld\n",sentTime);
-	//printf ("samplRTT: %ld\n",sampleRTT);
-	//printf ("estimRTT: %ld\n",estimatedRTT);
-	//printf ("deviaRTT: %ld\n",devRTT);
-	printf ("===============================================\n\n");
+	printf ("\n===== Timeout updated pkt %d | %ld -> %ld | %d =====\n",to_pkt.seq_num,old_to,timeoutInterval,sentTime == 0);
 }
 
 void end_transmission(){
-	printf("====== Transmission end =======\n");
-	set_timer_send(0,0); //stop timer
+	//input_wait("TERMINA TRASMISSIONE");
+	printf("\n\n================ Transmission end =================\n");
+	set_timer_send(0,0);
 	printf("File transfer finished\n");
 	gettimeofday(&transferEnd, NULL);
 	double tm=transferEnd.tv_sec-transferStart.tv_sec+(double)(transferEnd.tv_usec-transferStart.tv_usec)/1000000;
 	double tp=file_dim/tm;
 	printf("Transfer time: %f sec [%f KB/s]\n", tm, tp/1024);
-	printf("===========================\n");
+	printf("===================================================\n");
 }
 
 void set_timer_send(int sec,int micro){
@@ -201,13 +198,13 @@ void *receive_ack(void *arg){
 			duplicate_ack_count = 1;
 			cumulative_ack(ack_num);
 			update_timeout(pkt[ack_num-2]);
-			if (WindowEnd - SendBase >0){
+			if (WindowEnd - SendBase > 0){
 				set_timer_send(0,timeoutInterval);
 				isTimerStarted = true;
 			}
 			if (tot_acked == tot_pkts){
 				fileTransfer = false; //Stoppa il thread e l'invio dei pacchetti se arrivati alla fine del file
-				end_transmission();
+				//end_transmission();
 			}
 		}
 		else {
@@ -220,12 +217,6 @@ void *receive_ack(void *arg){
 			}
 		}
 	}
-}
-
-void input_wait(char *s){
-	char c;
-	printf("%s\n", s);
-	while (c = getchar() != '\n');
 }
 
 void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob, int fd) {
@@ -269,7 +260,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 		pkt[i].seq_num = i+1;
 		pkt[i].num_pkts = tot_pkts;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, pkt_data_size);
-		// printf ("%d | %d\n",i,pkt[i].pkt_dim); //DEBUG PER DIMENSIONE E NUMERO PKT
+		//printf ("%d | %d\n",pkt[i].seq_num,pkt[i].pkt_dim); //DEBUG PER DIMENSIONE E NUMERO PKT
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
 		}
@@ -280,6 +271,7 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	while(fileTransfer){ //while ho pachetti da inviare
 		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
 	}
+	end_transmission();
 }
 
 //Invia tutti i pacchetti nella finestra

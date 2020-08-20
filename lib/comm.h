@@ -19,7 +19,7 @@
 #define PUT 3
 #define QUIT 4
 
-#define LOST_PROB 5	// 0%<=LOST_PROB<=100%
+#define LOST_PROB 20	// 0%<=LOST_PROB<=100%
 #define FLYING 32	//max flying packets number
 #define MAX_ERR 25
 #define ADAPTIVE 1	//impostare a 0 per abolire timeout adattativo

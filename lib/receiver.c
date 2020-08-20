@@ -19,15 +19,14 @@
 
 int ReceiveBase, WindowEnd;
 int sock;
-int seq_num, expected_seq_num, tot_pkts, tot_received;
+int expected_seq_num, tot_pkts, tot_received;
 int *check_pkt_received;
-packet pkt_aux, *pkt;
+packet new_pkt, *pkt;
 socklen_t addr_len = sizeof(struct sockaddr_in);
 struct sockaddr_in *client_addr;
 bool allocated;
 
 void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int fd, int N);
-void alarm_routine();
 void checkSegment( struct sockaddr_in *, int socket);
 void send_cumulative_ack();
 
@@ -42,7 +41,7 @@ void time_stamp_receiver(){						//METTERE UNO UNICO IN UTILITY (MIKY)
 
 	ptm = localtime (&tv.tv_sec);
 	/* Format the date and time, down to a single second. */
-	strftime (time_string, sizeof (time_string), "%Y-%m-%d %H:%M:%S", ptm);
+	strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm);
 	/* Compute milliseconds from microseconds. */
 	microseconds = tv.tv_usec;
 	/* Print the formatted time, in seconds, followed by a decimal point
@@ -95,7 +94,6 @@ void move_window(){
 void initialize_recv(){ // Per trasferire un nuovo file senza disconnessione
 	ReceiveBase = 1;
 	WindowEnd = WIN_SIZE;
-	seq_num = 0;
 	expected_seq_num = 1;
 	tot_pkts = 1;
 	allocated = false;
@@ -114,112 +112,65 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 
 	printf("\n====== INIZIO DEL RECEIVER ======\n\n");
 	printf("File transfer started\nWait...\n");
-	memset(&pkt_aux, 0, sizeof(packet));
 
 	while(tot_received != tot_pkts){							
-		memset(&pkt_aux, 0, sizeof(packet));
+		memset(&new_pkt, 0, sizeof(packet));
 
-		if((recvfrom(socket, &pkt_aux, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
+		if((recvfrom(socket, &new_pkt, PKT_SIZE, 0, (struct sockaddr *)sender_addr, &addr_len)<0)) {
 			perror("error receive pkt ");
 			continue;
 		}
 
 		if (!allocated){	//Alloca le risorse per i pacchetti in ricezione e per l'array di interi che tiene traccia dei pkt ricevuti
-			tot_pkts = pkt_aux.num_pkts;
+			tot_pkts = new_pkt.num_pkts;
 			pkt=calloc(tot_pkts, sizeof(packet));
 			check_pkt_received=calloc(tot_pkts, sizeof(int));
 			allocated = true;
 		}
 
-		seq_num = pkt_aux.seq_num;
-		checkSegment(sender_addr, socket);
+		// SIMULAZIONE PKT PERSO/CORROTTO
+		if (is_packet_lost(LOST_PROB)){
+			printf ("\n\n DEBUG: PACCHETTO PERSO | PKT: %d\n\n",new_pkt.seq_num);
+		}
+		else {
+			// PRINT RIEPILOGO
+			time_stamp_receiver();
+			printf (" Ricevuto:%d | Atteso:%d | RecvBase:%d | WindowEnd:%d | TotRicevuti:%d\n",new_pkt.seq_num, expected_seq_num,ReceiveBase,WindowEnd,tot_received);
+
+			if (expected_seq_num < new_pkt.seq_num && new_pkt.seq_num <= WindowEnd && !is_received(new_pkt.seq_num)){
+				mark_recvd(new_pkt.seq_num);
+				//printf ("\n\npkt %d bufferizzato (1)\n\n",seq_num);
+				//printf("\nPacchetto con buco: %d", expected_seq_num);
+				memset(pkt+new_pkt.seq_num-1, 0, sizeof(packet));
+				pkt[new_pkt.seq_num-1] = new_pkt; //-1 perche pkt[k] ha seq number k+1
+				send_cumulative_ack(expected_seq_num);	
+			}
+
+			// Arrivo ordinato di segmento con numero di sequenza atteso
+			else if (new_pkt.seq_num == expected_seq_num){
+				mark_recvd(new_pkt.seq_num);
+				move_window();
+				memset(pkt+new_pkt.seq_num-1, 0, sizeof(packet));
+				pkt[new_pkt.seq_num-1] = new_pkt; //-1 perche pkt[k] ha seq number k+1
+				send_cumulative_ack(expected_seq_num);
+			}
+
+			else {
+				printf ("PACCHETTO SCARTATO | PKT: %d\n",new_pkt.seq_num);
+				send_cumulative_ack(expected_seq_num);
+			}
+		}
 	}
-	
+	//send_cumulative_ack(expected_seq_num);
 
 	//SCRITTURA FILE IN RICEZIONE
-	set_timer(0);
 	printf("\n\n====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", tot_pkts);
 	for(i=0; i<tot_pkts; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
-		printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);
+		//printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);
 	}
 	printf("============================\n");
-}
 
-
-	
-void checkSegment(struct sockaddr_in *client_addr, int socket){
-
-	struct itimerval it_val;
-	packet new_pkt;
-
-	signal(SIGALRM, alarm_routine);
-	memset(&new_pkt, 0, sizeof(packet));
-	
-	// SIMULAZIONE PKT PERSO/CORROTTO
-	if (is_packet_lost(LOST_PROB)){
-		printf ("\n!!! DEBUG: PACCHETTO PERSO (1) !!! | PKT: %d\n",pkt_aux.seq_num);
-		return;
-	}
-
-	// PRINT RIEPILOGO
-	time_stamp_receiver();
-	printf (" Ricevuto:%d | Atteso:%d | RecvBase:%d | WindowEnd:%d | TotRicevuti:%d (1)\n",seq_num, expected_seq_num,ReceiveBase,WindowEnd,tot_received);
-
-	if (expected_seq_num < seq_num && seq_num <= WindowEnd && !is_received(seq_num)){
-		mark_recvd(seq_num);
-		//printf ("\n\npkt %d bufferizzato (1)\n\n",seq_num);
-		printf("\nPerso pkt: %d", expected_seq_num);
-		memset(pkt+seq_num-1, 0, sizeof(packet));
-		pkt[pkt_aux.seq_num-1] = pkt_aux; //-1 perche pkt[k] ha seq number k+1
-		set_timer(100000);			// AVVIO TIMER
-		send_cumulative_ack(expected_seq_num);
-		return;
-	}
-
-	// Arrivo ordinato di segmento con numero di sequenza atteso
-	else if (seq_num == expected_seq_num){
-		mark_recvd(seq_num);
-		move_window();
-
-		memset(pkt+seq_num-1, 0, sizeof(packet));
-		pkt[pkt_aux.seq_num-1] = pkt_aux; //-1 perche pkt[k] ha seq number k+1
-		set_timer(100000);			// AVVIO TIMER
-
-		// Per ogni pacchetto ordinato correttamente ricevuto riparte il timer di 500ms			??? FORSE NON RIPARTE IL TIMER
-
-		while (tot_received!=tot_pkts){
-			recvfrom(socket, &new_pkt, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len);
-			if (is_packet_lost(LOST_PROB)){
-				printf ("\n!!! DEBUG: PACCHETTO PERSO (2) !!! | PKT: %d\n",new_pkt.seq_num);
-				return;
-			}			
-
-			time_stamp_receiver();
-			printf (" Ricevuto:%d | Atteso:%d | RecvBase:%d | WindowEnd:%d (2)\n" , new_pkt.seq_num, expected_seq_num,ReceiveBase,WindowEnd);
-			if (new_pkt.seq_num == expected_seq_num){
-				mark_recvd(new_pkt.seq_num);
-				seq_num = new_pkt.seq_num;
-				printf(" E'il pacchetto atteso nei 500ms -> stop timer");
-				memset(pkt+new_pkt.seq_num-1, 0, sizeof(packet));
-				pkt[new_pkt.seq_num-1] = new_pkt;
-				move_window();
-				set_timer(0);
-				break;
-			}
-
-			else if (expected_seq_num < new_pkt.seq_num && new_pkt.seq_num <= WindowEnd && !is_received(new_pkt.seq_num)){ // Arrivo di pkt con buco -> VIENE BUFFERIZZATO LO STESSO
-				mark_recvd(new_pkt.seq_num);
-				//printf ("\n\npkt %d bufferizzato (2)\n\n",new_pkt.seq_num);
-				printf("\nPerso pkt: %d", expected_seq_num);
-				memset(pkt+new_pkt.seq_num-1, 0, sizeof(packet));
-				pkt[new_pkt.seq_num-1] = new_pkt;
-				set_timer(0);
-				break;
-			}
-		}
-		send_cumulative_ack(expected_seq_num);		
-	}
 }
 
 // INVIO ACK CUMULATIVO
@@ -230,13 +181,7 @@ void send_cumulative_ack(int ack_number){
 	}
 
 	else{ 
-		printf("\t->INVIO ACK: %d | tot received:%d\n", ack_number,tot_received);
+		printf("->INVIO ACK: %d | tot received:%d\n\n", ack_number,tot_received);
 	}
-}
-
-void alarm_routine(){
-	printf("\nTimer Scaduto, nessun pacchetto da inviare trovato.");
-	send_cumulative_ack(expected_seq_num);
-	return;
 }
 
