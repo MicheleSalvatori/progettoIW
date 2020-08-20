@@ -11,6 +11,7 @@
 #include <fcntl.h>
 #include "./lib/comm.h"
 #include "./lib/sender.h"
+#include "./lib/receiver.h"
 
 #define PKT_SIZE 1500
 #define SERVER_PORT 25490
@@ -124,26 +125,9 @@ int main(int argc, char **argv){
 
     server_setup_conn(&server_sock, &server_address);
 
-    /* UDP: recvfrom riceve i pacchetti da qualunque macchina
-        -1 in caso di errore, altrimenti restituisce il numero di byte ricevuti
-        FLAG posto a 0 ??*/
-
-		// input_wait("Premere invio dopo connessione client\n");
     while (1) {
-      //set_timeout(server_sock, 0);//recvfrom all'inizio è bloccante (si fa con timeout==0)
 
-      // vedere bene server_reliable_conn
       if (server_reliable_conn(server_sock, &client_address) == 0) {//se un client non riesce a ben connettersi, il server non forka
-        // Un nuovo processo per ogni client che si connette al server PENSO
-        // pid = fork();
-
-        // if (pid < 0) printf ("SERVER: fork error\n");
-
-        // if (pid == 0){
-          // pid = getpid();
-          // child_sock = create_socket(REQUEST_SEC); //REQUEST_SEC secondi di timeout per scegliere il servizio
-
-
           control = sendto(server_sock, READY, strlen(READY), 0, (struct sockaddr *)&client_address, addr_len);
 					printf("====================================================");
           if (control < 0){
@@ -231,7 +215,43 @@ int main(int argc, char **argv){
                 }
               //set_timeout(child_sock, TIMEOUT_PKT);
               sender(server_sock, &client_address, FLYING, LOST_PROB, fd);          
-              break;     
+              break;  
+  
+					case PUT:
+						printf("SERVER %d: UPLOAD request\n", pid);
+						//set_timeout_sec(child_sock, SELECT_FILE_SEC);//Voglio sapere nome del file
+						memset(buff, 0, sizeof(buff));
+						control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&client_address, &addr_len);
+						if (control < 0) {
+							printf("SERVER %d: file transfer failed (1)\n", pid);
+							free(buff);
+							free(path);
+							close(child_sock);
+							return 1;
+						}
+						snprintf(path, 12+strlen(buff)+1, "serverFiles/%s", buff);
+						//controlla se il file esiste già
+						fd = open(path, O_RDONLY);
+						if(fd>0){
+							printf("SERVER %d: The file already exists, you can not overwrite files on server.\n", pid);
+							close(fd);
+							return 1;
+						}
+						close(fd);
+						//ricevi il file
+						fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0666);
+						//set_timeout(child_sock, TIMEOUT_PKT);
+						control=receiver(server_sock, &client_address, FLYING, LOST_PROB, fd);
+						if(control == -1) {
+							close(fd);
+							remove(path);
+							free(buff);
+							free(path);
+							close(child_sock);
+							return 1;
+						}
+						close(fd);
+						break;   
   					}
             goto request;
         }

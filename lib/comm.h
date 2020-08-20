@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 // parametri di default
 
 #define SERVER_PORT 25490
@@ -17,7 +19,7 @@
 #define PUT 3
 #define QUIT 4
 
-#define LOST_PROB 10	// 0%<=LOST_PROB<=100%
+#define LOST_PROB 5	// 0%<=LOST_PROB<=100%
 #define FLYING 32	//max flying packets number
 #define MAX_ERR 25
 #define ADAPTIVE 1	//impostare a 0 per abolire timeout adattativo
@@ -48,10 +50,15 @@ char i;
 #define MAX_FILE_LIST 100
 #define MAX_NAMEFILE_LEN 127
 
+// Costanti per il calcolo del timeout
+#define ALPHA 0.125
+#define BETA  0.250
+
 
 typedef struct packet{
 	int seq_num;
 	short int pkt_dim;
 	char data[PKT_SIZE-2*sizeof(int)-sizeof(short int)]; //Riservo spazio come dimensione del pacchetto - intero del seq number - intero della dim pacchetto - num pkts
 	int num_pkts;
+	uint64_t sent_time; //Tempo di invio del pkt in microsecondi
 } packet;

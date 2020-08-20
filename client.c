@@ -10,11 +10,41 @@
 #include <fcntl.h>
 #include "./lib/comm.h"
 #include "./lib/receiver.h"
+#include "./lib/sender.h"
 
 void client_setup_conn (int*, struct sockaddr_in*);
 void client_reliable_conn (int, struct sockaddr_in*);
 char *time_stamp();
 
+int files_from_folder_client(char *list_files[MAX_FILE_LIST]) {
+  /* apre la cartella e prende tutti i nomi dei file presenti in essa,
+   * inserendoli in un buffer e ritornando il numero di file presenti
+   */
+  int i = 0;
+  DIR *dp;
+  struct dirent *ep;
+  for(; i < MAX_FILE_LIST; ++i) {
+    if ((list_files[i] = malloc(MAX_NAMEFILE_LEN * sizeof(char))) == NULL) {
+      perror("malloc list_files");
+      exit(EXIT_FAILURE);
+    }
+  }
+
+  dp = opendir(CLIENT_FOLDER);
+  if(dp != NULL){
+    i = 0;
+    while((ep = readdir(dp))) {
+      if(strncmp(ep->d_name, ".", 1) != 0 && strncmp(ep->d_name, "..", 2) != 0){
+        strncpy(list_files[i], ep->d_name, MAX_NAMEFILE_LEN);
+        ++i;
+      }
+    }
+    closedir(dp);
+  }else{
+    perror ("Couldn't open the directory");
+  }
+  return i;
+}
 
 
 int main (int argc, char** argv) {
@@ -45,8 +75,9 @@ int main (int argc, char** argv) {
 
 menu:
   printf("\n============= COMMAND LIST ================\n");
-  printf("1) List available files on server\n");
-  printf("2) Download a file from server\n");
+  printf("1) List available files on the server\n");
+  printf("2) Download a file from the server\n");
+  printf("3) Upload a file to the server\n");
   printf("============================================\n\n");
   printf("> Choose an operation: ");
   if(scanf("%d", &answer) > 0 && answer == LIST ){
@@ -84,58 +115,97 @@ menu:
 		break;
 		}
 
-		case GET:
-			control = sendto(client_sock, (void *)&get, sizeof(int), 0, (struct sockaddr *)&server_address, addr_len);
-			if (control < 0) {
-				printf("CLIENT: request failed (sending)\n");
-				exit(-1);
-			}
-			printf("Type the file name to download (30 seconds): ");
-			alarm(SELECT_FILE_SEC);
-			memset(buff, 0, sizeof(buff));
-			if(scanf("%s", buff)>0) {
-				alarm(0);
-			}
-			
-			//controlla se il file esiste già nella directory del client
-			char *aux = calloc(PKT_SIZE, sizeof(char));
-			snprintf(aux, 12+strlen(buff)+1, "clientFiles/%s", buff);
-			fd = open(aux, O_RDONLY);
-			if(fd>0){
-				printf("File già presente nella directory locale. Il File verrà sovrascritto.\n");
-				remove(aux);
-			}
-			close(fd);
+	case GET:
+		control = sendto(client_sock, (void *)&get, sizeof(int), 0, (struct sockaddr *)&server_address, addr_len);
+		if (control < 0) {
+			printf("CLIENT: request failed (sending)\n");
+			exit(-1);
+		}
+		
+		printf("Type the file name to download (30 seconds): ");
+		alarm(SELECT_FILE_SEC);
+		memset(buff, 0, sizeof(buff));
+		if(scanf("%s", buff)>0) {
+			alarm(0);
+		}
+		
+		//controlla se il file esiste già nella directory del client
+		char *aux = calloc(PKT_SIZE, sizeof(char));
+		snprintf(aux, 12+strlen(buff)+1, "clientFiles/%s", buff);
+		fd = open(aux, O_RDONLY);
+		if(fd>0){
+			printf("File già presente nella directory locale. Il File verrà sovrascritto.\n");
+			remove(aux);
+		}
+		close(fd);
 
-			//invio del nome del file al server
-			control = sendto(client_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&server_address, addr_len);
-			if (control < 0) {
-				printf("CLIENT: request failed (sending)\n");
-				exit(-1);
-			}
-			snprintf(path, 12+strlen(buff)+1, "clientFiles/%s", buff);
-			fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0666);
+		//invio del nome del file al server
+		control = sendto(client_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&server_address, addr_len);
+		if (control < 0) {
+			printf("CLIENT: request failed (sending)\n");
+			exit(-1);
+		}
+		snprintf(path, 12+strlen(buff)+1, "clientFiles/%s", buff);
+		fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0666);
 
-			//in attesa del server se il file è presente o meno
-			if (recvfrom(client_sock, buff, strlen(NFOUND), 0, (struct sockaddr *)&server_address, &addr_len) < 0) {
-				printf("CLIENT: error recvfrom\n");
-			}
-			if (strncmp(buff, NFOUND, strlen(NFOUND)) == 0) { //file non presente sul server se ricevo notfound
-				printf("CLIENT: file not found on server\n");
-				close(fd);
-				remove(path);
-				exit(-1);
-			}
-			
-			control=receiver(client_sock, &server_address, FLYING, LOST_PROB, fd);
-			if (control == -1) {
-				close(fd);
-				remove(path);
-				break;
-			}
+		//in attesa del server se il file è presente o meno
+		if (recvfrom(client_sock, buff, strlen(NFOUND), 0, (struct sockaddr *)&server_address, &addr_len) < 0) {
+			printf("CLIENT: error recvfrom\n");
+		}
+		if (strncmp(buff, NFOUND, strlen(NFOUND)) == 0) { //file non presente sul server se ricevo notfound
+			printf("CLIENT: file not found on server\n");
 			close(fd);
+			remove(path);
+			exit(-1);
+		}
+		
+		control=receiver(client_sock, &server_address, FLYING, LOST_PROB, fd);
+		if (control == -1) {
+			close(fd);
+			remove(path);
 			break;
-  }
+		}
+		close(fd);
+		break;
+
+
+	case PUT:
+
+		control = sendto(client_sock, (void *)&put, sizeof(int), 0, (struct sockaddr *)&server_address, sizeof(server_address));
+		if (control < 0) {
+			printf("CLIENT: request failed (sending)\n");
+			exit(-1);
+		}
+
+		printf("File available to upload: \n\n");
+		num_files = files_from_folder_client(list_files);
+		for (i = 0; i < num_files; i++) {
+			printf("%s\n", list_files[i]);	
+		}
+
+		printf("\nType the file name to upload (30 seconds): ");
+		alarm(SELECT_FILE_SEC);
+		memset(buff, 0, sizeof(buff));
+		if(scanf("%s", buff)>0) {
+			alarm(0);
+		}
+		
+		//comunico al server il nome del file che sto trasferendo
+		control = sendto(client_sock, buff, PKT_SIZE, 0, (struct sockaddr *)&server_address, addr_len);
+		if (control < 0) {
+			printf("CLIENT: request failed (sending)\n");
+			exit(-1);
+		}
+		//+1 per lo /0 altrimenti lo sostituisce a ultimo carattere
+		snprintf(path, 12+strlen(buff)+1, "clientFiles/%s", buff); 
+		fd = open(path, O_RDONLY);
+		if(fd == -1){
+			printf("CLIENT: file not found\n");
+			return 1;
+		}
+		sender(client_sock, &server_address, FLYING, LOST_PROB, fd);
+		break;
+  	}
 
   goto menu;
 

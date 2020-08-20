@@ -39,7 +39,7 @@ int tot_pkts;
 bool fileTransfer = true;
 bool isTimerStarted = false;
 struct itimerval it_val;
-struct timeval end, start;
+struct timeval transferEnd, transferStart;
 socklen_t addr_len;
 struct sockaddr_in *client_addr;
 off_t file_dim;
@@ -53,12 +53,58 @@ void timeout_routine();
 void set_timer_send(int sec,int micro);
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
 
+uint64_t time_now()
+{
+	struct timeval current;
+	gettimeofday(&current, 0);
+	return current.tv_sec * 1000000 + current.tv_usec;
+}
+
+void time_stamp_sender(){						//METTERE UNO UNICO IN UTILITY (MIKY)
+	// implementata con libreria sys/time.h
+	struct timeval tv;
+	struct tm* ptm;
+	char time_string[40];
+ 	long microseconds;
+
+	gettimeofday(&tv,0);
+
+	ptm = localtime (&tv.tv_sec);
+	/* Format the date and time, down to a single second. */
+	strftime (time_string, sizeof (time_string), "%Y-%m-%d %H:%M:%S", ptm);
+	/* Compute milliseconds from microseconds. */
+	microseconds = tv.tv_usec;
+	/* Print the formatted time, in seconds, followed by a decimal point
+	and the milliseconds. */
+	printf ("[%s.%03ld] ", time_string, microseconds);
+}
+
+int64_t timeoutInterval = 500000, estimatedRTT = 1000, devRTT = 1;
+
+void update_timeout(packet to_pkt)
+{	
+	uint64_t sentTime = to_pkt.sent_time;
+	int64_t old_to = timeoutInterval; //DEBUG
+	uint64_t sampleRTT = time_now() - sentTime;
+	estimatedRTT = (1-ALPHA) * estimatedRTT + ALPHA * sampleRTT;
+	devRTT = (1-BETA)*devRTT + BETA * abs(sampleRTT - estimatedRTT);
+	timeoutInterval = (estimatedRTT + 4 * devRTT);
+	//timeoutInterval = timeoutInterval/5;
+	printf ("\n===== Timeout updated pkt %d | %ld -> %ld =====\n",to_pkt.seq_num,old_to,timeoutInterval);
+	//time_stamp_sender();
+	printf ("\nsentTime: %ld\n",sentTime);
+	//printf ("samplRTT: %ld\n",sampleRTT);
+	//printf ("estimRTT: %ld\n",estimatedRTT);
+	//printf ("deviaRTT: %ld\n",devRTT);
+	printf ("===============================================\n\n");
+}
+
 void end_transmission(){
 	printf("====== Transmission end =======\n");
 	set_timer_send(0,0); //stop timer
 	printf("File transfer finished\n");
-	gettimeofday(&end, NULL);
-	double tm=end.tv_sec-start.tv_sec+(double)(end.tv_usec-start.tv_usec)/1000000;
+	gettimeofday(&transferEnd, NULL);
+	double tm=transferEnd.tv_sec-transferStart.tv_sec+(double)(transferEnd.tv_usec-transferStart.tv_usec)/1000000;
 	double tp=file_dim/tm;
 	printf("Transfer time: %f sec [%f KB/s]\n", tm, tp/1024);
 	printf("===========================\n");
@@ -66,6 +112,10 @@ void end_transmission(){
 
 void set_timer_send(int sec,int micro){
     struct itimerval it_val;
+		if (micro >= 1000000){
+			sec = 1;
+			micro = 0;
+		}
     
         it_val.it_value.tv_sec = sec;
     	it_val.it_value.tv_usec = micro;
@@ -101,15 +151,17 @@ void print_packet_status (int seq){
 }
 
 void print_window_status(){							//STAMPA LO STATO DI INVIO DEI PKT PER IL DEBUG
+	printf ("\n====== SEND WINDOW STATUS ======\n");
 	for (int j = SendBase;j<SendBase+20;j++){
 		if (j == tot_pkts){
 			break;
 		}
 		print_packet_status (j);
 	}
+	printf ("==================================\n");
 }
 
-void cumulative_ack(int received_ack){
+void cumulative_ack(int received_ack){				//IMPOSTA COME ACKED TUTTI I PKT CON SEQUENZA INFERIORE A QUELLO RICEVUTO 
 	for (int k = 0; k<received_ack-1; k++){
 		check_pkt[k] = 2;
 	}	
@@ -123,6 +175,9 @@ void initialize_send(){ // Per trasferire un nuovo file senza disconnessione
 	tot_pkts = 0;	
 	fileTransfer = true;
 	isTimerStarted = false;
+	timeoutInterval = 500000;
+	estimatedRTT = 1000;
+	devRTT = 1;
 }
 
 void *receive_ack(void *arg){
@@ -130,7 +185,6 @@ void *receive_ack(void *arg){
 	socklen_t addr_len = args->addr_len;
 	struct sockaddr_in *client_addr = args->client_addr;
 	int socket = args->socket;
-
 	int duplicate_ack_count = 1;
 
 	while(fileTransfer){
@@ -139,14 +193,16 @@ void *receive_ack(void *arg){
 			exit(-1);
 		}
 		if (ack_num>SendBase){
+			time_stamp_sender();
 			printf ("Ricevuto ACK numero: %d\n",ack_num);
-			printf ("Incrementato SendBase | %d -> %d\n\n",SendBase,ack_num);
+			//printf ("Incrementato SendBase | %d -> %d\n\n",SendBase,ack_num);
 			SendBase = ack_num;
 			tot_acked = ack_num-1;
 			duplicate_ack_count = 1;
 			cumulative_ack(ack_num);
+			update_timeout(pkt[ack_num-2]);
 			if (WindowEnd - SendBase >0){
-				set_timer_send(0,TO_MICRO);
+				set_timer_send(0,timeoutInterval);
 				isTimerStarted = true;
 			}
 			if (tot_acked == tot_pkts){
@@ -206,19 +262,19 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 	check_pkt=calloc(tot_pkts, sizeof(int));
 	lseek(fd, 0, SEEK_SET);
 
-	gettimeofday(&start, NULL);
+	gettimeofday(&transferStart, NULL);
 
 	// ASSEGNAZIONE DEI NUMERI DI SEQUENZA AI PACCHETTI
 	for(i=0; i<tot_pkts; i++){
 		pkt[i].seq_num = i+1;
 		pkt[i].num_pkts = tot_pkts;
 		pkt[i].pkt_dim=read(fd, pkt[i].data, pkt_data_size);
-		printf ("%d | %d\n",i,pkt[i].pkt_dim);
+		// printf ("%d | %d\n",i,pkt[i].pkt_dim); //DEBUG PER DIMENSIONE E NUMERO PKT
 		if(pkt[i].pkt_dim==-1){
 			pkt[i].pkt_dim=0;
 		}
 	}
-	input_wait("INIZIA TRASMISSIONE");
+	//input_wait("INIZIA TRASMISSIONE");
 
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare
@@ -246,27 +302,30 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 
 		if(check_pkt[i]==0){
 			if (!isTimerStarted){
-				set_timer_send(0,TO_MICRO);
+				set_timer_send(0,timeoutInterval);
 				isTimerStarted = true;
 			}
 			if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 				perror ("PACKET LOST (1)");
 			}
 			else {
-				printf("Inviato PKT num: %d\n", pkt[i].seq_num);
+				pkt[i].sent_time = time_now();
+				time_stamp_sender();
+				printf("Inviato PKT num: %d | sent_time: %ld\n",pkt[i].seq_num,pkt[i].sent_time);
 				NextSeqNum++;
 				check_pkt[i]=1;
 			}
 		}
 	}
-	//print_send_status();
+	//print_window_status();
 	//printf("\n====== FINE SEND WINDOW ======\n\n");
 }
 
 void timeout_routine(){
 	printf("\nTimer Scaduto, PKT perso\n");
 	fast_retrasmission(SendBase-1);
-	set_timer_send(0,TO_MICRO);
+	set_timer_send(0,timeoutInterval);
 	isTimerStarted = true;
 	return;
 }
+
