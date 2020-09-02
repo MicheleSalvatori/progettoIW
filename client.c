@@ -11,10 +11,11 @@
 #include "./lib/comm.h"
 #include "./lib/receiver.h"
 #include "./lib/sender.h"
+#include "./lib/utility.h"
 
 void client_setup_conn (int*, struct sockaddr_in*);
 void client_reliable_conn (int, struct sockaddr_in*);
-char *time_stamp();
+void client_reliable_close (int client_sock, struct sockaddr_in *server_addr);
 
 int files_from_folder_client(char *list_files[MAX_FILE_LIST]) {
   /* apre la cartella e prende tutti i nomi dei file presenti in essa,
@@ -51,7 +52,7 @@ int main (int argc, char** argv) {
 
 	int control, answer, bytes, num_files;
 	int client_sock;
-	int list = LIST, get = GET, put = PUT, quit = QUIT;
+	int list = LIST, get = GET, put = PUT, close_conn = CLOSE;
 	struct sockaddr_in server_address;
 	char *buff = calloc(PKT_SIZE, sizeof(char));
 	char *path = calloc(PKT_SIZE, sizeof(char));
@@ -66,22 +67,17 @@ int main (int argc, char** argv) {
 
   memset(buff, 0, sizeof(buff));
   // attende pacchetto READY dal server
-  control = recvfrom(client_sock, buff, strlen(READY), 0, (struct sockaddr *)&server_address, &addr_len);
-  if (control < 0){
-    printf("CLIENT: server errore READY\n");
-    exit(-1);
-	
-  }
 
 menu:
   printf("\n============= COMMAND LIST ================\n");
   printf("1) List available files on the server\n");
   printf("2) Download a file from the server\n");
   printf("3) Upload a file to the server\n");
+  printf("4) Close connection\n");
   printf("============================================\n\n");
   printf("> Choose an operation: ");
-  if(scanf("%d", &answer) > 0 && answer == LIST ){
-  //  alarm(0);
+  if(scanf("%d", &answer) > 0 && (answer == LIST || answer == GET || answer == PUT)){
+	alarm(0);
   }
   printf("\n");
 
@@ -122,8 +118,7 @@ menu:
 			exit(-1);
 		}
 		
-		printf("Type the file name to download (30 seconds): ");
-		alarm(SELECT_FILE_SEC);
+		printf("Type the file name to download: ");
 		memset(buff, 0, sizeof(buff));
 		if(scanf("%s", buff)>0) {
 			alarm(0);
@@ -134,7 +129,16 @@ menu:
 		snprintf(aux, 12+strlen(buff)+1, "clientFiles/%s", buff);
 		fd = open(aux, O_RDONLY);
 		if(fd>0){
-			printf("File già presente nella directory locale. Il File verrà sovrascritto.\n");
+			char overwrite;
+			printf("\nFile già presente nella directory locale. Vuoi sovrascrivere il file? y/n: ");
+			scanf(" %c", &overwrite);
+			if (overwrite == 'Y' || overwrite == 'y'){
+				//overwrite
+			}
+			else {
+				sendto(client_sock, NOVERW, strlen(NOVERW), 0, (struct sockaddr *)&server_address, addr_len);
+				goto menu;
+			}
 			remove(aux);
 		}
 		close(fd);
@@ -183,8 +187,7 @@ menu:
 			printf("%s\n", list_files[i]);	
 		}
 
-		printf("\nType the file name to upload (30 seconds): ");
-		alarm(SELECT_FILE_SEC);
+		printf("\nType the file name to upload: ");
 		memset(buff, 0, sizeof(buff));
 		if(scanf("%s", buff)>0) {
 			alarm(0);
@@ -205,6 +208,15 @@ menu:
 		}
 		sender(client_sock, &server_address, FLYING, LOST_PROB, fd);
 		break;
+
+	case CLOSE:
+		control = sendto(client_sock, (void *)&close_conn, sizeof(int), 0, (struct sockaddr *)&server_address, sizeof(server_address));
+		if (control < 0) {
+			printf("CLIENT: request failed (sending)\n");
+			exit(-1);
+		}
+		client_reliable_close(client_sock, &server_address);
+		return 0;
   	}
 
   goto menu;
@@ -239,7 +251,6 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 	socklen_t addr_len = sizeof(*server_addr);
 
 	//passo 1 del three-way-handashake per setup di connessione
-	// set_timeout_sec(client_sock, 1);
 	printf("\n================= CONNECTION SETUP =================\n");
     printf("%s CLIENT: invio syn\n", time_stamp());
 
@@ -250,7 +261,7 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 	}
 
 	//in attesa del SYNACK
-  printf("%s CLIENT: attesa synack\n", time_stamp());
+  	printf("%s CLIENT: attesa synack\n", time_stamp());
 
 	memset(buff, 0, sizeof(buff));
 	control = recvfrom(client_sock, buff, strlen(SYNACK), 0, (struct sockaddr *)server_addr, &addr_len);
@@ -259,8 +270,7 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 		exit(-1);
 	}
 
-	//invio del ACK_SYNACK
-  //sleep(1); //1 secondo prima di inviare SYNACK
+  //invio del ACK_SYNACK
   printf("%s CLIENT: invio ACK_SYNACK\n", time_stamp());
 
 	control = sendto(client_sock, ACK_SYNACK, strlen(ACK_SYNACK), 0, (struct sockaddr *)server_addr, addr_len);
@@ -270,19 +280,50 @@ void client_reliable_conn (int client_sock, struct sockaddr_in *server_addr) {
 	}
 
 	printf("%s CLIENT: connection established\n", time_stamp());
-	printf("===================================================\n");
+	printf("===================================================\n\n");
 }
 
+void client_reliable_close (int client_sock, struct sockaddr_in *server_addr) {
+	
+	int control;
+	char *buff = calloc(PKT_SIZE, sizeof(char));
+	socklen_t addr_len = sizeof(*server_addr);
 
-// FUNZIONE PER time_stamp da mettere in utility.c
-char *time_stamp(){
-	// implementata con libreria sys/time.h
-	char *timestamp = (char *)malloc(sizeof(char) * 16);
-	time_t ltime;
-	ltime=time(NULL);
-	struct tm *tm;
-	tm=localtime(&ltime);
-	sprintf(timestamp,"[%04d/%02d/%02d %02d:%02d:%02d]", tm->tm_year+1900, tm->tm_mon+1,
-  tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
-	return timestamp;
+	printf("\n================= CONNECTION CLOSE =================\n");
+	//Invio del FIN
+	printf("%s CLIENT: invio FIN\n", time_stamp());
+	control = sendto(client_sock, FIN, strlen(FIN), 0, (struct sockaddr *)server_addr, addr_len);
+	if (control < 0) {
+		printf("CLIENT: connection failed (sending FIN)\n");
+		exit(-1);
+	}
+
+	//in attesa del FINACK
+	memset(buff, 0, sizeof(buff));
+	control = recvfrom(client_sock, buff, strlen(FINACK), 0, (struct sockaddr *)server_addr, &addr_len);
+	if (control < 0 || strncmp(buff, FINACK, strlen(FINACK)) != 0) {
+		printf("CLIENT: close connection failed (receiving FINACK)\n");
+		exit(-1);
+	}
+	printf("%s CLIENT: ricevuto FINACK\n", time_stamp());
+
+	//in attesa del FIN
+	memset(buff, 0, sizeof(buff));
+	control = recvfrom(client_sock, buff, strlen(FIN), 0, (struct sockaddr *)server_addr, &addr_len);
+	if (control < 0 || strncmp(buff, FIN, strlen(FIN)) != 0) {
+		printf("CLIENT: close connection failed (receiving FIN)\n");
+		exit(-1);
+	}
+	printf("%s CLIENT: ricevuto FIN\n", time_stamp());
+
+	//invio del FINACK
+	printf("%s CLIENT: invio FINACK\n", time_stamp());
+	control = sendto(client_sock, FINACK, strlen(FINACK), 0, (struct sockaddr *)server_addr, addr_len);
+	if (control < 0) {
+		printf("CLIENT: close connection failed (sending FINACK)\n");
+		exit(-1);
+	}		
+
+	printf("CLIENT: connection closed\n");
+	printf("===================================================\n\n");
 }

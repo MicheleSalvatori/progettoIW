@@ -12,13 +12,11 @@
 #include <signal.h>
 #include <fcntl.h>
 #include <sys/param.h>
-
-#include "utility.c"
-
-#define WIN_SIZE 15
+#include "utility.h"
 
 int ReceiveBase, WindowEnd;
 int sock;
+int num_packet_lost;
 int expected_seq_num, tot_pkts, tot_received;
 int *check_pkt_received;
 packet new_pkt, *pkt;
@@ -30,27 +28,8 @@ void recv_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int f
 void checkSegment( struct sockaddr_in *, int socket);
 void send_cumulative_ack();
 
-void time_stamp_receiver(){						//METTERE UNO UNICO IN UTILITY (MIKY)
-	// implementata con libreria sys/time.h
-	struct timeval tv;
-	struct tm* ptm;
-	char time_string[40];
- 	long microseconds;
-
-	gettimeofday(&tv,0);
-
-	ptm = localtime (&tv.tv_sec);
-	/* Format the date and time, down to a single second. */
-	strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm);
-	/* Compute milliseconds from microseconds. */
-	microseconds = tv.tv_usec;
-	/* Print the formatted time, in seconds, followed by a decimal point
-	and the milliseconds. */
-	printf ("[%s.%03ld] ", time_string, microseconds);
-}
-
 void print_recvd_status(){ //DEBUG
-	for (int n=ReceiveBase-1;n<ReceiveBase+WIN_SIZE-1;n++){
+	for (int n=ReceiveBase-1;n<ReceiveBase+RECV_WIN-1;n++){
 		printf ("seq %d | %d\n",n+1,check_pkt_received[n]);
 	}
 }
@@ -81,7 +60,7 @@ void move_window(){
 		if (is_received(j)){
 			expected_seq_num++;
 			ReceiveBase++;
-			WindowEnd = MIN(ReceiveBase + WIN_SIZE,tot_pkts);
+			WindowEnd = MIN(ReceiveBase + RECV_WIN,tot_pkts);
 		}
 		else{
 			break;
@@ -93,11 +72,12 @@ void move_window(){
 
 void initialize_recv(){ // Per trasferire un nuovo file senza disconnessione
 	ReceiveBase = 1;
-	WindowEnd = WIN_SIZE;
+	WindowEnd = RECV_WIN;
 	expected_seq_num = 1;
 	tot_pkts = 1;
 	allocated = false;
 	tot_received = 0;
+	num_packet_lost = 0;
 }
 
 
@@ -131,11 +111,11 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 		// SIMULAZIONE PKT PERSO/CORROTTO
 		if (is_packet_lost(LOST_PROB)){
 			printf ("\n\n DEBUG: PACCHETTO PERSO | PKT: %d\n\n",new_pkt.seq_num);
+			num_packet_lost++;
 		}
 		else {
 			// PRINT RIEPILOGO
-			time_stamp_receiver();
-			printf (" Ricevuto:%d | Atteso:%d | RecvBase:%d | WindowEnd:%d | TotRicevuti:%d\n",new_pkt.seq_num, expected_seq_num,ReceiveBase,WindowEnd,tot_received);
+			printf ("%s Ricevuto:%d | Atteso:%d | TotRicevuti:%d\n",time_stamp(), new_pkt.seq_num, expected_seq_num,tot_received);
 
 			if (expected_seq_num < new_pkt.seq_num && new_pkt.seq_num <= WindowEnd && !is_received(new_pkt.seq_num)){
 				mark_recvd(new_pkt.seq_num);
@@ -164,7 +144,7 @@ int receiver(int socket, struct sockaddr_in *sender_addr, int N, int loss_prob, 
 	//send_cumulative_ack(expected_seq_num);
 
 	//SCRITTURA FILE IN RICEZIONE
-	printf("\n\n====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\n", tot_pkts);
+	printf("\n\n====== SCRITTURA FILE ======\nPacchetti da scrivere: %d\nPacchetti persi: %d\n", tot_pkts,num_packet_lost);
 	for(i=0; i<tot_pkts; i++){
 		write(fd, pkt[i].data, pkt[i].pkt_dim); //scrivo un pacchetto alla volta in ordine sul file
 		//printf("Scritto pkt | SEQ: %d, IND: %ld\n", pkt[i].seq_num, i);

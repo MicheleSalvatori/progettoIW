@@ -14,6 +14,7 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include "comm.h"
+#include "utility.h"
 
 pthread_t thread;
 struct thread_args
@@ -22,8 +23,6 @@ struct thread_args
     socklen_t addr_len;
 	int socket;
 };
-
-#define WIN_SIZE 15 			//Dimensione della finestra di trasmissione;
 
 /* ACK CUMULATIVO UTILIZZATO: Inviare un ACK = N indica che tutti i segmenti fino a N-1 sono stati ricevuti e che ora aspetto il byute numero N
 
@@ -48,15 +47,9 @@ int *check_pkt;
 packet *pkt;
 
 void timeout_routine();
-void set_timer_send(int sec,int micro);
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N);
 
-void input_wait(char *s){
-	char c;
-	printf("%s\n", s);
-	while (c = getchar() != '\n');
-}
-
+// Ritorna l'orario attuale in microsecondi
 uint64_t time_now()
 {
 	struct timeval current;
@@ -64,27 +57,14 @@ uint64_t time_now()
 	return current.tv_sec * 1000000 + current.tv_usec;
 }
 
-void time_stamp_sender(){						//METTERE UNO UNICO IN UTILITY (MIKY)
-	// implementata con libreria sys/time.h
-	struct timeval tv;
-	struct tm* ptm;
-	char time_string[40];
- 	long microseconds;
-
-	gettimeofday(&tv,0);
-	ptm = localtime (&tv.tv_sec);
-	strftime (time_string, sizeof (time_string), "%H:%M:%S", ptm); //"%Y-%m-%d %H:%M:%S" full timestamp con data 
-	microseconds = tv.tv_usec;
-	printf ("[%s.%03ld] ", time_string, microseconds);
-}
-
 int64_t timeoutInterval = 500000, estimatedRTT = 1000, devRTT = 1;
 
 void update_timeout(packet to_pkt)
 {	
+	uint64_t recvTime = time_now();
 	uint64_t sentTime = to_pkt.sent_time;
 	int64_t old_to = timeoutInterval; //DEBUG
-	uint64_t sampleRTT = time_now() - sentTime;
+	uint64_t sampleRTT = recvTime - sentTime;
 	if (sentTime == 0){
 		sampleRTT = 1000;
 	}
@@ -96,9 +76,8 @@ void update_timeout(packet to_pkt)
 }
 
 void end_transmission(){
-	//input_wait("TERMINA TRASMISSIONE");
 	printf("\n\n================ Transmission end =================\n");
-	set_timer_send(0,0);
+	set_timer(0);
 	printf("File transfer finished\n");
 	gettimeofday(&transferEnd, NULL);
 	double tm=transferEnd.tv_sec-transferStart.tv_sec+(double)(transferEnd.tv_usec-transferStart.tv_usec)/1000000;
@@ -107,55 +86,12 @@ void end_transmission(){
 	printf("===================================================\n");
 }
 
-void set_timer_send(int sec,int micro){
-    struct itimerval it_val;
-		if (micro >= 1000000){
-			sec = 1;
-			micro = 0;
-		}
-    
-        it_val.it_value.tv_sec = sec;
-    	it_val.it_value.tv_usec = micro;
-    	it_val.it_interval.tv_sec = 0;
-	    it_val.it_interval.tv_usec = 0;
-		if (setitimer(ITIMER_REAL, &it_val, NULL) == -1) {
-  			perror("setitimer");
-			exit(1);
-			}
-		// printf("Timer avviato\n");
-}
-
 void fast_retrasmission(int rtx_seq){
 	if (sendto(sock, pkt+rtx_seq, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
 		perror("Errore ritrasmissione pkt");
 	}else{
 		printf("FAST RETRANSMIT -> PKT: %d\n", (pkt+rtx_seq)->seq_num);
 	}
-}
-
-void print_packet_status (int seq){
-	char *status;
-	if (check_pkt[seq-1] == 0){
-		status = "Da Inviare";
-	}
-	else if (check_pkt[seq-1] == 1){
-		status = "Inviato non Acked";
-	}
-	else if (check_pkt[seq-1] == 2){
-		status = "Già Acked";
-	}
-	printf ("Stato PKT %d | %s\n",seq,status);
-}
-
-void print_window_status(){							//STAMPA LO STATO DI INVIO DEI PKT PER IL DEBUG
-	printf ("\n====== SEND WINDOW STATUS ======\n");
-	for (int j = SendBase;j<SendBase+20;j++){
-		if (j == tot_pkts){
-			break;
-		}
-		print_packet_status (j);
-	}
-	printf ("==================================\n");
 }
 
 void cumulative_ack(int received_ack){				//IMPOSTA COME ACKED TUTTI I PKT CON SEQUENZA INFERIORE A QUELLO RICEVUTO 
@@ -189,9 +125,8 @@ void *receive_ack(void *arg){
 			perror ("Errore ricezione ack");
 			exit(-1);
 		}
-		if (ack_num>SendBase){
-			time_stamp_sender();
-			printf ("Ricevuto ACK numero: %d\n",ack_num);
+		if (ack_num>SendBase){	//Ricevuto ACK non duplicato
+			printf ("%s Ricevuto ACK numero: %d\n",time_stamp(),ack_num);
 			//printf ("Incrementato SendBase | %d -> %d\n\n",SendBase,ack_num);
 			SendBase = ack_num;
 			tot_acked = ack_num-1;
@@ -199,7 +134,7 @@ void *receive_ack(void *arg){
 			cumulative_ack(ack_num);
 			update_timeout(pkt[ack_num-2]);
 			if (WindowEnd - SendBase > 0){
-				set_timer_send(0,timeoutInterval);
+				set_timer(timeoutInterval);
 				isTimerStarted = true;
 			}
 			if (tot_acked == tot_pkts){
@@ -207,7 +142,7 @@ void *receive_ack(void *arg){
 				//end_transmission();
 			}
 		}
-		else {
+		else {	//Ricevuto ACK duplicato
 			printf ("Ricevuto ACK duplicato: %d\n",ack_num);
 			duplicate_ack_count++;
 			if (duplicate_ack_count == 3){
@@ -265,36 +200,29 @@ void sender(int socket, struct sockaddr_in *receiver_addr, int N, int lost_prob,
 			pkt[i].pkt_dim=0;
 		}
 	}
-	//input_wait("INIZIA TRASMISSIONE");
 
 	//INIZIO TRASMISSIONE PACCHETTI
 	while(fileTransfer){ //while ho pachetti da inviare
-		send_window(socket, receiver_addr, pkt, lost_prob, WIN_SIZE);
+		send_window(socket, receiver_addr, pkt, lost_prob, TRAN_WIN);
 	}
 	end_transmission();
 }
 
 //Invia tutti i pacchetti nella finestra
 void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int lost_prob, int N){
-	WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
+	WindowEnd = MIN(tot_pkts,SendBase+TRAN_WIN-1);
 	signal(SIGALRM, timeout_routine);
-
-	//printf("\n====== INIZIO SEND WINDOW ======\n\n");
-	//printf ("SendBase : %d\n",SendBase);
-	//printf ("WindowEnd: %d\n",WindowEnd);
-	//printf("\n================================\n\n");
 	int i, j;
 	socklen_t addr_len = sizeof(struct sockaddr_in);
 
 	// Caso in cui la finestra non è ancora piena di pkt in volo
 		
-	for(i=NextSeqNum-1; i<WindowEnd; i++){					// ho messo -1 non so perchè
-		WindowEnd = MIN(tot_pkts,SendBase+WIN_SIZE-1);
-		//input_wait("!! CONTINUE !!\n");
+	for(i=NextSeqNum-1; i<WindowEnd; i++){
+		WindowEnd = MIN(tot_pkts,SendBase+TRAN_WIN-1);
 
 		if(check_pkt[i]==0){
 			if (!isTimerStarted){
-				set_timer_send(0,timeoutInterval);
+				set_timer(timeoutInterval);
 				isTimerStarted = true;
 			}
 			if (sendto(socket, pkt+i, PKT_SIZE, 0, (struct sockaddr *)client_addr, addr_len)<0){
@@ -302,22 +230,55 @@ void send_window(int socket, struct sockaddr_in *client_addr, packet *pkt, int l
 			}
 			else {
 				pkt[i].sent_time = time_now();
-				time_stamp_sender();
-				printf("Inviato PKT num: %d | sent_time: %ld\n",pkt[i].seq_num,pkt[i].sent_time);
+				
+				printf("%s Inviato PKT num: %d | sent_time: %ld\n",time_stamp(),pkt[i].seq_num,pkt[i].sent_time);
 				NextSeqNum++;
 				check_pkt[i]=1;
 			}
 		}
 	}
-	//print_window_status();
-	//printf("\n====== FINE SEND WINDOW ======\n\n");
 }
 
 void timeout_routine(){
 	printf("\nTimer Scaduto, PKT perso\n");
 	fast_retrasmission(SendBase-1);
-	set_timer_send(0,timeoutInterval);
+	set_timer(timeoutInterval);
 	isTimerStarted = true;
 	return;
+}
+
+
+
+
+
+
+
+//FUNZIONI DI DEBUG
+
+//STAMPA UN MESSAGGIO CHE RIPORTA LO STATO DI INVIO DI UN PACCHETTO
+void print_packet_status (int seq){
+	char *status;
+	if (check_pkt[seq-1] == 0){
+		status = "Da Inviare";
+	}
+	else if (check_pkt[seq-1] == 1){
+		status = "Inviato non Acked";
+	}
+	else if (check_pkt[seq-1] == 2){
+		status = "Già Acked";
+	}
+	printf ("Stato PKT %d | %s\n",seq,status);
+}
+
+//STAMPA LO STATO DI INVIO DI TUTTI I PACCHETTI NELLA FINESTRA
+void print_window_status(){							
+	printf ("\n====== SEND WINDOW STATUS ======\n");
+	for (int j = SendBase;j<SendBase+20;j++){
+		if (j == tot_pkts){
+			break;
+		}
+		print_packet_status (j);
+	}
+	printf ("==================================\n");
 }
 

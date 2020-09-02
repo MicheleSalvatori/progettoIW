@@ -1,64 +1,52 @@
 #include <stdint.h>
 
-// parametri di default
-
+// PARAMETRI DI DEFAULT
 #define SERVER_PORT 25490
 #define SERVER_IP "127.0.0.1"
 
+// DEFINIZIONE DEI MESSAGGI DEI PACCHETTI
 #define SYN "syn"
 #define SYNACK "synack"
 #define ACK_SYNACK "ack_synack"
-#define READY "ready"
 #define FIN "fin"
 #define FINACK "ackfin"
 #define FOUND "found"
 #define NFOUND "notfound"
+#define NOVERW "nooverwrite"
 
+// DEFINIZIONE DEI COMANDI
 #define LIST 1
 #define GET 2
 #define PUT 3
-#define QUIT 4
+#define CLOSE 4
 
-#define LOST_PROB 20	// 0%<=LOST_PROB<=100%
-#define FLYING 32	//max flying packets number
-#define MAX_ERR 25
-#define ADAPTIVE 1	//impostare a 0 per abolire timeout adattativo
+// PARAMETRI SULLA TRASMISSIONE
+#define LOST_PROB 15			// 0%<=LOST_PROB<=100%
+#define TRAN_WIN 32				// Dimensione della finestra di trasmissione
+#define RECV_WIN 32				// Dimensione della finestra di ricezione
+#define PKT_SIZE 1500			// Dimensione del pacchetto
 
-//in microsecondi
-#define TIMEOUT_PKT 24000	//valore minimo 8000
-#define TIME_UNIT 4000		//valore minimo di cui si può variare timeout
-#define MAX_TIMEOUT 800000  //800 millisecondi timeout massimo scelto
-#define MIN_TIMEOUT 8000	//8 millisecondi timeout minimo
 
-//in secondi
-#define REQUEST_SEC 10
-#define SELECT_FILE_SEC 30
-
-char i;
-// #define fflush(stdin) while ((i = getchar()) != '\n' && i != EOF)
-
-#define PKT_SIZE 1500
-#define MAX_INPUT_LINE 128
-
-//tempo di attesa in secondi
-#define MAX_WAIT_TIME 300
+// PARAMETRI SULLE CARTELLE CLIENT/SERVER
 #define CLIENT_FOLDER "./clientFiles/"
 #define SERVER_FOLDER "./serverFiles/"
 
-// 2^16 - 1 = 65'535 numero di porta massimo
-#define MAX_PORT 65535
-#define MAX_FILE_LIST 100
-#define MAX_NAMEFILE_LEN 127
 
-// Costanti per il calcolo del timeout
+// PARAMETRI SUI FILE
+#define MAX_FILE_LIST 100		// Massimo numero di file mostrati nella lista
+#define MAX_NAMEFILE_LEN 127	// Massimo numero di caratteri mostrato nel filename
+
+
+// COSTANTI PER IL CALCOLO DEL TIMEOUT
 #define ALPHA 0.125
 #define BETA  0.250
 
 
+// DEFINIZIONE DELLA STRUTTURA DI UN PACCHETTO
 typedef struct packet{
 	int seq_num;
 	short int pkt_dim;
-	char data[PKT_SIZE-2*sizeof(int)-sizeof(short int)]; //Riservo spazio come dimensione del pacchetto - intero del seq number - intero della dim pacchetto - num pkts
-	int num_pkts;
-	uint64_t sent_time; //Tempo di invio del pkt in microsecondi
+	char data[PKT_SIZE-2*sizeof(int)-sizeof(short int)]; 	//Riservo spazio come dimensione del pacchetto - intero del seq number - intero della dim pacchetto - num pkts
+	int num_pkts;											//Indica il numero totale dei pacchetti da ricevere (meglio eof?)
+	uint64_t sent_time; 									//Tempo di invio del pkt in microsecondi
 } packet;

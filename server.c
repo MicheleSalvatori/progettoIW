@@ -12,12 +12,12 @@
 #include "./lib/comm.h"
 #include "./lib/sender.h"
 #include "./lib/receiver.h"
+#include "./lib/utility.h"
 
 #define PKT_SIZE 1500
 #define SERVER_PORT 25490
 #define LIST 1
 #define REQUEST_SEC 10
-#define READY "ready"
 
 #define SYN "syn"
 #define SYNACK "synack"
@@ -27,7 +27,7 @@
 
 void server_setup_conn( int *, struct sockaddr_in *);
 int server_reliable_conn(int , struct sockaddr_in *); // vedere se per tcp va bene
-char *time_stamp();
+void server_reliable_close (int server_sock, struct sockaddr_in* client_addr, int pid);
 
 // da mettere in un file utility.c
 void set_timeout_sec(int sockfd, int timeout) {
@@ -115,8 +115,7 @@ int main(int argc, char **argv){
     socklen_t addr_len = sizeof(client_address);
     char *buff = calloc(PKT_SIZE, sizeof(char));
     char *path = calloc(PKT_SIZE, sizeof(char));
-    // char *buffToSend = calloc(PKT_SIZE, sizeof(char));
-		char *buffToSend = "CRISTALLINO";
+    char *buffToSend = calloc(PKT_SIZE, sizeof(char));
     FILE *fptr;
     pid_t pid;
 		int fd;
@@ -124,16 +123,9 @@ int main(int argc, char **argv){
 		char *list_files[MAX_FILE_LIST];
 
     server_setup_conn(&server_sock, &server_address);
+    server_reliable_conn(server_sock, &client_address);
 
     while (1) {
-
-      if (server_reliable_conn(server_sock, &client_address) == 0) {//se un client non riesce a ben connettersi, il server non forka
-          control = sendto(server_sock, READY, strlen(READY), 0, (struct sockaddr *)&client_address, addr_len);
-					printf("====================================================");
-          if (control < 0){
-						perror("Ready error");
-            printf("SERVER: port comunication failed\n");
-          }
 
  request:
           // set_timeout_sec(child_sock, REQUEST_SEC);
@@ -191,17 +183,22 @@ int main(int argc, char **argv){
                 close(child_sock);
                 return 1;
               }
+
               //+1 per lo /0 altrimenti lo sostituisce a ultimo carattere
               snprintf(path, 12+strlen(buff)+1, "serverFiles/%s", buff); 
               fd = open(path, O_RDONLY);
               printf("PATH: %s\n",path);
               printf("FD  : %d\n",fd);
               if(fd == -1){
-                printf("SERVER %d: file not found\n", pid);
+                if (strcmp(buff,NOVERW) == 0){
+                  printf ("Download annullato dal client\n");
+                  goto request;
+                }
+                printf("SERVER: file not found\n");
                 //comunico al client che il file non è presente
                   if (sendto(server_sock, NFOUND, strlen(NFOUND), 0, (struct sockaddr *)&client_address, addr_len) < 0) {
                       printf("SERVER %d: error sendto\n", pid);
-                      return 1;
+                      goto request;
                   }
                 free(buff);
                 free(path);
@@ -210,7 +207,7 @@ int main(int argc, char **argv){
               }
               //comunico al client che il file è presente e può essere scaricato
                 if (sendto(server_sock, FOUND, strlen(FOUND), 0, (struct sockaddr *)&client_address, addr_len) < 0) {
-                    printf("SERVER %d: error sendto\n", pid);
+                    printf("SERVER: error sendto\n");
                     return 1;
                 }
               //set_timeout(child_sock, TIMEOUT_PKT);
@@ -240,7 +237,6 @@ int main(int argc, char **argv){
 						close(fd);
 						//ricevi il file
 						fd = open(path, O_CREAT | O_TRUNC | O_RDWR, 0666);
-						//set_timeout(child_sock, TIMEOUT_PKT);
 						control=receiver(server_sock, &client_address, FLYING, LOST_PROB, fd);
 						if(control == -1) {
 							close(fd);
@@ -251,14 +247,21 @@ int main(int argc, char **argv){
 							return 1;
 						}
 						close(fd);
-						break;   
+						break;
+    case CLOSE:
+          server_reliable_close(server_sock, &client_address, pid);
+          free(buff);
+          free(path);
+          close(child_sock);
+          return 0;
+
+					default:
+						printf("Wrong request\n\n");
+						break;  
   					}
             goto request;
         }
       }
-    // }
-    return 0;
-}
 
 void server_setup_conn( int *server_sock, struct sockaddr_in *server_addr){
 
@@ -304,11 +307,9 @@ int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {
         printf("SERVER: connection failed (receiving SYN)\n");
         return 1;
     }
-    // set_timeout_sec(server_sock, 1);//timeout attivato alla ricezione del SYN
 
     //invio del SYNACK
 		printf("%s SERVER: invio SYNACK\n", time_stamp());
-
     control = sendto(server_sock, SYNACK, strlen(SYNACK), 0, (struct sockaddr *)client_addr, addr_len);
     if (control < 0) {
         printf("SERVER: connection failed (sending SYNACK)\n");
@@ -316,30 +317,61 @@ int server_reliable_conn (int server_sock, struct sockaddr_in* client_addr) {
     }
 
     //in attesa del ACK_SYNACK
-		printf("%s SERVER: attesa ack_synack\n", time_stamp());
-
     memset(buff, 0, sizeof(buff));
     control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len);
     if (control < 0 || strncmp(buff, ACK_SYNACK, strlen(ACK_SYNACK)) != 0) {
         printf("SERVER: connection failed (receiving ACK_SYNACK)\n");
         return 1;
     }
+    printf("%s SERVER: ricevuto ACK_SYNACK\n", time_stamp());
 
     printf("%s SERVER: connection established\n", time_stamp());
+    printf("====================================================\n\n");
     return 0;
 }
 
-// FUNZIONE PER time_stamp da mettere in utility.c
-// aggiungere millisecondi o utilizzare un altro modo
+void server_reliable_close (int server_sock, struct sockaddr_in* client_addr, int pid) {
+    
+    int control;
+    char *buff = calloc(PKT_SIZE, sizeof(char));
+    socklen_t addr_len = sizeof(*client_addr);
+   
+    printf("\n================= CONNECTION CLOSE =================\n");
 
-char *time_stamp(){
-	// implementata con libreria sys/time.h
-	char *timestamp = (char *)malloc(sizeof(char) * 16);
-	time_t ltime;
-	ltime=time(NULL);
-	struct tm *tm;
-	tm=localtime(&ltime);
-	sprintf(timestamp,"[%04d/%02d/%02d %02d:%02d:%02d]", tm->tm_year+1900, tm->tm_mon+1,
-  tm->tm_mday, tm->tm_hour, tm->tm_min, tm->tm_sec);
-	return timestamp;
+    //in attesa di ricevere FIN
+    control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len);
+    if (control < 0 || strncmp(buff, FIN, strlen(FIN)) != 0) {
+        printf("SERVER %d: close connection failed (receiving FIN)\n", pid);
+        return;
+    }
+    printf("%s SERVER: ricevuto FIN\n", time_stamp());
+ 	
+    //invio del FINACK
+    printf("%s SERVER: invio FINACK\n", time_stamp());
+    control = sendto(server_sock, FINACK, strlen(FINACK), 0, (struct sockaddr *)client_addr, addr_len);
+    if (control < 0) {
+        printf("SERVER %d: close connection failed (sending FINACK)\n", pid);
+        return;
+    }
+
+    //invio del FIN
+    printf("%s SERVER: invio FIN\n", time_stamp());
+	  control = sendto(server_sock, FIN, strlen(FIN), 0, (struct sockaddr *)client_addr, addr_len);
+    if (control < 0) {
+        printf("SERVER %d: close connection failed (sending FIN)\n", pid);
+        return;
+    }
+
+    //in attesa del FINACK
+    memset(buff, 0, sizeof(buff));
+    control = recvfrom(server_sock, buff, PKT_SIZE, 0, (struct sockaddr *)client_addr, &addr_len);
+    if (control < 0 || strncmp(buff, FINACK, strlen(FINACK)) != 0) {
+        printf("SERVER %d: close connection failed (receiving FINACK)\n", pid);
+        return;
+    }
+    printf("%s SERVER: ricevuto FINACK\n", time_stamp());
+ 
+	  printf("SERVER: connection closed\n");
+	  printf("===================================================\n\n");
+    return;
 }

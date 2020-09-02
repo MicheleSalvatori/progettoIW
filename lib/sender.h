@@ -1,1 +1,1 @@
-void sender(int socket, struct sockaddr_in *receiver_addr, int N, int loss_prob, int fd);
+void sender(int socket, struct sockaddr_in *receiver_addr, int loss_prob, int fd);
